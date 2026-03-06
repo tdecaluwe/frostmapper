@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>frostmapper – Scandinavia geographical query</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────── */
+    #sidebar {
+      width: 300px;
+      min-width: 260px;
+      background: #16213e;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      overflow-y: auto;
+      z-index: 1000;
+      box-shadow: 2px 0 8px rgba(0,0,0,.5);
+    }
+
+    #sidebar h1 {
+      font-size: 1.3rem;
+      color: #e94560;
+      letter-spacing: .05em;
+    }
+
+    #sidebar h2 {
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: #888;
+      margin-bottom: 4px;
+    }
+
+    label { font-size: .85rem; color: #ccc; display: block; margin-bottom: 3px; }
+
+    select, input[type="number"] {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: 6px;
+      border: 1px solid #0f3460;
+      background: #0f3460;
+      color: #e0e0e0;
+      font-size: .9rem;
+      outline: none;
+    }
+    select:focus, input:focus { border-color: #e94560; }
+
+    .row { display: flex; gap: 8px; }
+    .row > * { flex: 1; }
+
+    button#load-btn {
+      padding: 10px;
+      background: #e94560;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    button#load-btn:hover { background: #c73652; }
+    button#load-btn:disabled { background: #555; cursor: not-allowed; }
+
+    #status {
+      font-size: .8rem;
+      min-height: 1.2em;
+      color: #aaa;
+      word-break: break-word;
+    }
+    #status.error { color: #e94560; }
+
+    /* ── Legend ─────────────────────────────────────────────── */
+    #legend-wrap { display: flex; flex-direction: column; gap: 6px; }
+    #legend-bar {
+      height: 16px;
+      border-radius: 4px;
+      background: linear-gradient(to right,
+        hsl(240,80%,20%),
+        hsl(200,80%,40%),
+        hsl(140,70%,50%),
+        hsl(60,90%,60%),
+        hsl(0,90%,55%)
+      );
+    }
+    #legend-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: .72rem;
+      color: #aaa;
+    }
+
+    /* ── Data-source note ────────────────────────────────────── */
+    #sources {
+      font-size: .72rem;
+      color: #777;
+      line-height: 1.5;
+      border-top: 1px solid #0f3460;
+      padding-top: 12px;
+    }
+    #sources a { color: #7ecfff; text-decoration: none; }
+    #sources a:hover { text-decoration: underline; }
+
+    /* ── Map ─────────────────────────────────────────────────── */
+    #map {
+      flex: 1;
+      position: relative;
+    }
+
+    /* Loading spinner overlay */
+    #spinner {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+    #spinner.active { display: flex; }
+    .spinner-ring {
+      width: 52px; height: 52px;
+      border: 5px solid #ffffff44;
+      border-top-color: #e94560;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════ SIDEBAR ═══════════════════════════ -->
+<aside id="sidebar">
+  <h1>🗺 frostmapper</h1>
+
+  <section>
+    <h2>Parameter</h2>
+    <label for="param-select">Select parameter</label>
+    <select id="param-select">
+      <option value="terrain-steepness">Terrain steepness (°)</option>
+      <option value="snow-depth-mean">Mean snow depth (mm)</option>
+      <option value="snow-depth-median">Median snow depth (mm)</option>
+    </select>
+  </section>
+
+  <!-- Snow-depth options (shown only when relevant) -->
+  <section id="snow-options">
+    <h2>Snow-depth options</h2>
+    <label for="sd-month">Calendar month</label>
+    <input type="number" id="sd-month" min="1" max="12" value="1" />
+
+    <label for="sd-day" style="margin-top:8px">Calendar day</label>
+    <input type="number" id="sd-day" min="1" max="31" value="15" />
+
+    <label for="sd-years" style="margin-top:8px">Years (comma-separated)</label>
+    <input type="text" id="sd-years" placeholder="e.g. 2018,2019,2020,2021,2022"
+           value="2018,2019,2020,2021,2022" />
+  </section>
+
+  <section>
+    <h2>Bounding box</h2>
+    <div class="row">
+      <div>
+        <label for="bb-west">West (°E)</label>
+        <input type="number" id="bb-west" step="0.5" value="4" />
+      </div>
+      <div>
+        <label for="bb-east">East (°E)</label>
+        <input type="number" id="bb-east" step="0.5" value="32" />
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div>
+        <label for="bb-south">South (°N)</label>
+        <input type="number" id="bb-south" step="0.5" value="57" />
+      </div>
+      <div>
+        <label for="bb-north">North (°N)</label>
+        <input type="number" id="bb-north" step="0.5" value="72" />
+      </div>
+    </div>
+
+    <label for="resolution" style="margin-top:8px">Grid resolution (°)</label>
+    <input type="number" id="resolution" min="0.01" max="2" step="0.05" value="0.1" />
+  </section>
+
+  <button id="load-btn">Load / Refresh</button>
+  <div id="status"></div>
+
+  <!-- Colour legend -->
+  <section id="legend-wrap" style="display:none">
+    <h2>Legend</h2>
+    <div id="legend-bar"></div>
+    <div id="legend-labels">
+      <span id="leg-min">0</span>
+      <span id="leg-mid"></span>
+      <span id="leg-max">100</span>
+    </div>
+    <div id="leg-unit" style="font-size:.72rem;color:#888;margin-top:2px"></div>
+  </section>
+
+  <div id="sources">
+    <strong>Data sources</strong><br>
+    <a href="https://frost.met.no/" target="_blank">MET Norway Frost API</a> –
+    point observations<br>
+    <a href="https://thredds.met.no/thredds/catalog/senorge/" target="_blank">seNorge THREDDS</a> –
+    gridded snow data<br>
+    <a href="https://registry.opendata.aws/copernicus-dem/" target="_blank">Copernicus DEM GLO-30</a> –
+    elevation<br>
+    Map tiles: <a href="https://www.openstreetmap.org/" target="_blank">OpenStreetMap</a>
+  </div>
+</aside>
+
+<!-- ═══════════════════════ MAP ═══════════════════════════════ -->
+<div id="map">
+  <div id="spinner"><div class="spinner-ring"></div></div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN2GqQI=" crossorigin=""></script>
+
+<script>
+'use strict';
+
+// ── Map initialisation ────────────────────────────────────────
+const map = L.map('map', {
+  center: [64.5, 17.0],   // centre of Norway
+  zoom: 5,
+  zoomControl: true,
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  maxZoom: 19,
+}).addTo(map);
+
+// ── State ─────────────────────────────────────────────────────
+let currentCanvas = null;   // Leaflet ImageOverlay wrapping the canvas
+let currentData   = null;   // last loaded grid response
+
+// ── UI helpers ────────────────────────────────────────────────
+const paramSelect  = document.getElementById('param-select');
+const snowOptions  = document.getElementById('snow-options');
+const loadBtn      = document.getElementById('load-btn');
+const statusEl     = document.getElementById('status');
+const spinner      = document.getElementById('spinner');
+const legendWrap   = document.getElementById('legend-wrap');
+const legMin       = document.getElementById('leg-min');
+const legMid       = document.getElementById('leg-mid');
+const legMax       = document.getElementById('leg-max');
+const legUnit      = document.getElementById('leg-unit');
+
+function setStatus(msg, isError = false) {
+  statusEl.textContent = msg;
+  statusEl.className = isError ? 'error' : '';
+}
+
+function setLoading(active) {
+  spinner.classList.toggle('active', active);
+  loadBtn.disabled = active;
+}
+
+// Show/hide snow-depth options
+function updateSnowOptions() {
+  const v = paramSelect.value;
+  snowOptions.style.display = (v === 'snow-depth-mean' || v === 'snow-depth-median')
+    ? 'block' : 'none';
+}
+paramSelect.addEventListener('change', updateSnowOptions);
+updateSnowOptions();
+
+// ── Colour scale (blue → cyan → green → yellow → red) ────────
+const COLOUR_STOPS = [
+  [0.00, [20,  20, 140]],
+  [0.25, [20, 140, 200]],
+  [0.50, [50, 180,  80]],
+  [0.75, [230, 220,  40]],
+  [1.00, [220,  30,  30]],
+];
+
+function valueToRGB(t) {
+  // t in [0, 1]
+  t = Math.max(0, Math.min(1, t));
+  let i = 0;
+  while (i < COLOUR_STOPS.length - 2 && COLOUR_STOPS[i + 1][0] <= t) i++;
+  const [t0, c0] = COLOUR_STOPS[i];
+  const [t1, c1] = COLOUR_STOPS[i + 1];
+  const f = (t - t0) / (t1 - t0);
+  return c0.map((ch, j) => Math.round(ch + f * (c1[j] - ch)));
+}
+
+// ── Canvas rendering ──────────────────────────────────────────
+function renderGrid(response) {
+  const { bounds, grid, unit } = response;
+  const { rows, cols, data } = grid;
+
+  // Collect finite values to set scale
+  let minVal = Infinity, maxVal = -Infinity;
+  for (const row of data) {
+    for (const v of row) {
+      if (v !== null && isFinite(v)) {
+        if (v < minVal) minVal = v;
+        if (v > maxVal) maxVal = v;
+      }
+    }
+  }
+  if (!isFinite(minVal)) { setStatus('No valid data in response.', true); return; }
+
+  const range = maxVal - minVal || 1;
+
+  // Draw on an off-screen canvas
+  const canvas = document.createElement('canvas');
+  canvas.width  = cols;
+  canvas.height = rows;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(cols, rows);
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const v = data[r][c];
+      const idx = (r * cols + c) * 4;
+      if (v === null || !isFinite(v)) {
+        imgData.data[idx + 3] = 0;   // transparent
+      } else {
+        const t = (v - minVal) / range;
+        const [R, G, B] = valueToRGB(t);
+        imgData.data[idx]     = R;
+        imgData.data[idx + 1] = G;
+        imgData.data[idx + 2] = B;
+        imgData.data[idx + 3] = 180; // 70 % opacity
+      }
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  // Convert to data URL for ImageOverlay
+  const url = canvas.toDataURL();
+  const latLngBounds = L.latLngBounds(
+    [bounds.south, bounds.west],
+    [bounds.north, bounds.east],
+  );
+
+  if (currentCanvas) map.removeLayer(currentCanvas);
+  currentCanvas = L.imageOverlay(url, latLngBounds, { opacity: 1, interactive: false });
+  currentCanvas.addTo(map);
+  map.fitBounds(latLngBounds);
+
+  // Update legend
+  legendWrap.style.display = 'flex';
+  legMin.textContent = minVal.toFixed(1);
+  legMid.textContent = ((minVal + maxVal) / 2).toFixed(1);
+  legMax.textContent = maxVal.toFixed(1);
+  legUnit.textContent = unit || '';
+}
+
+// ── Build API URL ──────────────────────────────────────────────
+function buildUrl() {
+  const param      = paramSelect.value;
+  const west       = document.getElementById('bb-west').value;
+  const south      = document.getElementById('bb-south').value;
+  const east       = document.getElementById('bb-east').value;
+  const north      = document.getElementById('bb-north').value;
+  const resolution = document.getElementById('resolution').value;
+
+  const common = new URLSearchParams({ west, south, east, north, resolution });
+
+  if (param === 'terrain-steepness') {
+    return `/api/terrain-steepness?${common}`;
+  }
+
+  const month  = document.getElementById('sd-month').value;
+  const day    = document.getElementById('sd-day').value;
+  const years  = document.getElementById('sd-years').value.trim();
+
+  common.set('month', month);
+  common.set('day',   day);
+  if (years) common.set('years', years);
+
+  const endpoint = param === 'snow-depth-mean'
+    ? '/api/snow-depth/mean'
+    : '/api/snow-depth/median';
+
+  return `${endpoint}?${common}`;
+}
+
+// ── Load & render ─────────────────────────────────────────────
+async function loadData() {
+  setLoading(true);
+  setStatus('Fetching data…');
+
+  try {
+    const url  = buildUrl();
+    const resp = await fetch(url);
+    const json = await resp.json();
+
+    if (!resp.ok || json.error) {
+      throw new Error(json.error || `HTTP ${resp.status}`);
+    }
+
+    currentData = json;
+    renderGrid(json);
+
+    const desc = json.description || paramSelect.options[paramSelect.selectedIndex].text;
+    let msg = `✔ ${desc}`;
+    if (json.fetch_errors && json.fetch_errors.length) {
+      msg += ` (${json.fetch_errors.length} year(s) skipped)`;
+    }
+    setStatus(msg);
+  } catch (err) {
+    setStatus(`Error: ${err.message}`, true);
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+}
+
+loadBtn.addEventListener('click', loadData);
+
+// Load terrain steepness on first open (uses only synthetic/local data)
+loadData();
+</script>
+</body>
+</html>
