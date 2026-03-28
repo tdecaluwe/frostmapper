@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FrostMapper OpenLayers Demo</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@10.4.0/ol.css">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="controls" aria-label="Zoom controls">
+    <button id="zoom-in" aria-label="Zoom in" type="button">+</button>
+    <button id="zoom-out" aria-label="Zoom out" type="button">−</button>
+  </div>
+
+  <div id="sidebar">
+    <section class="panel">
+      <div class="panel-header">
+        <span>Basemaps</span>
+      </div>
+      <div class="panel-body basemap-list">
+        <label class="basemap-row">
+          <span class="basemap-dot opentopo"></span>
+          <span class="basemap-name">OpenTopoMap fallback</span>
+          <input id="toggle-opentopo" type="checkbox" checked>
+        </label>
+        <label class="basemap-row">
+          <span class="basemap-dot norway"></span>
+          <span class="basemap-name">Norway / Kartverket</span>
+          <input id="toggle-norway" type="checkbox" checked>
+        </label>
+        <label class="basemap-row">
+          <span class="basemap-dot swiss"></span>
+          <span class="basemap-name">Switzerland / swisstopo</span>
+          <input id="toggle-switzerland" type="checkbox" checked>
+        </label>
+        <label class="basemap-row">
+          <span class="basemap-dot france"></span>
+          <span class="basemap-name">France / IGN</span>
+          <input id="toggle-france" type="checkbox" checked>
+        </label>
+        <label class="basemap-row">
+          <span class="basemap-dot belgium"></span>
+          <span class="basemap-name">Belgium / NGI</span>
+          <input id="toggle-belgium" type="checkbox">
+        </label>
+        <label class="basemap-row">
+          <span class="basemap-dot germany"></span>
+          <span class="basemap-name">Germany / basemap.de</span>
+          <input id="toggle-germany" type="checkbox">
+        </label>
+        <label class="basemap-row">
+          <span class="basemap-dot austria"></span>
+          <span class="basemap-name">Austria / basemap.at</span>
+          <input id="toggle-austria" type="checkbox">
+        </label>
+        <label class="basemap-row">
+          <span class="basemap-dot italy"></span>
+          <span class="basemap-name">Italy / Bolzano</span>
+          <input id="toggle-italy" type="checkbox">
+        </label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <span>Display projection</span>
+      </div>
+      <div class="panel-body">
+        <label for="projection-picker" class="projection-label">Projection</label>
+        <select id="projection-picker">
+          <option value="EPSG:3857" selected>EPSG:3857 (Web Mercator)</option>
+          <option value="EPSG:4326">EPSG:4326 (WGS 84)</option>
+          <option value="EPSG:3035">EPSG:3035 (ETRS89 LAEA)</option>
+          <option value="EPSG:25833">EPSG:25833 (ETRS89 / UTM 33N)</option>
+          <option value="EPSG:2056">EPSG:2056 (CH1903+ / LV95)</option>
+        </select>
+      </div>
+    </section>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "ol/": "https://esm.sh/ol@10.4.0/",
+      "proj4": "https://esm.sh/proj4@2.20.4"
+    }
+  }
+  </script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

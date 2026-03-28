@@ -323,6 +323,38 @@ document.getElementById('toggle-switzerland')?.addEventListener('change', (event
 
 document.getElementById('toggle-france')?.addEventListener('change', (event) => {
   franceLayer.setVisible(event.target.checked)
+
+document.getElementById('toggle-belgium')?.addEventListener('change', (event) => {
+  belgiumLayer.setVisible(event.target.checked)
+})
+
+document.getElementById('toggle-germany')?.addEventListener('change', (event) => {
+  germanyLayer.setVisible(event.target.checked)
+})
+
+document.getElementById('toggle-austria')?.addEventListener('change', (event) => {
+  austriaLayer.setVisible(event.target.checked)
+})
+
+document.getElementById('toggle-italy')?.addEventListener('change', (event) => {
+  italyLayer.setVisible(event.target.checked)
+})
+})
+
+document.getElementById('toggle-belgium')?.addEventListener('change', (event) => {
+  belgiumLayer.setVisible(event.target.checked)
+})
+
+document.getElementById('toggle-germany')?.addEventListener('change', (event) => {
+  germanyLayer.setVisible(event.target.checked)
+})
+
+document.getElementById('toggle-austria')?.addEventListener('change', (event) => {
+  austriaLayer.setVisible(event.target.checked)
+})
+
+document.getElementById('toggle-italy')?.addEventListener('change', (event) => {
+  italyLayer.setVisible(event.target.checked)
 })
 
 window.__demoDebug = {
@@ -341,6 +373,10 @@ window.__demoDebug = {
       { name: 'norway', visible: norwayLayer.getVisible() },
       { name: 'switzerland', visible: switzerlandLayer.getVisible() },
       { name: 'france', visible: franceLayer.getVisible() },
+      { name: 'belgium', visible: belgiumLayer.getVisible() },
+      { name: 'germany', visible: germanyLayer.getVisible() },
+      { name: 'austria', visible: austriaLayer.getVisible() },
+      { name: 'italy', visible: italyLayer.getVisible() },
     ]
   },
 }
