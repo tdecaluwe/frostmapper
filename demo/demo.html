@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FrostMapper OpenLayers Demo</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@10.4.0/ol.css">
-  <link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="/node_modules/ol/ol.css">
+  <link rel="stylesheet" href="/demo/styles.css">
 </head>
 <body>
   <div id="map"></div>
@@ -47,13 +47,8 @@
           <input id="toggle-belgium" type="checkbox">
         </label>
         <label class="basemap-row">
-          <span class="basemap-dot germany"></span>
-          <span class="basemap-name">Germany / basemap.de</span>
-          <input id="toggle-germany" type="checkbox">
-        </label>
-        <label class="basemap-row">
           <span class="basemap-dot austria"></span>
-          <span class="basemap-name">Austria / basemap.at</span>
+          <span class="basemap-name">Austria / basemap.at GRAU</span>
           <input id="toggle-austria" type="checkbox">
         </label>
         <label class="basemap-row">
@@ -72,23 +67,22 @@
         <label for="projection-picker" class="projection-label">Projection</label>
         <select id="projection-picker">
           <option value="EPSG:3857" selected>EPSG:3857 (Web Mercator)</option>
-          <option value="EPSG:4326">EPSG:4326 (WGS 84)</option>
           <option value="EPSG:3035">EPSG:3035 (ETRS89 LAEA)</option>
-          <option value="EPSG:25833">EPSG:25833 (ETRS89 / UTM 33N)</option>
-          <option value="EPSG:2056">EPSG:2056 (CH1903+ / LV95)</option>
+          <option value="EPSG:PEIRCE">Peirce Quincuncial</option>
+          <option value="EPSG:GRIEGER">Grieger Triptychial</option>
         </select>
       </div>
     </section>
   </div>
 
-  <script type="importmap">
-  {
-    "imports": {
-      "ol/": "https://esm.sh/ol@10.4.0/",
-      "proj4": "https://esm.sh/proj4@2.20.4"
-    }
-  }
-  </script>
-  <script type="module" src="./app.js"></script>
+  <div id="scalebar" class="scalebar" aria-label="Scale bar">
+    <div class="scalebar-track"></div>
+    <div class="scalebar-text">
+      <span>0</span>
+      <span id="scalebar-end-label"></span>
+    </div>
+  </div>
+
+  <script type="module" src="/demo/app.js"></script>
 </body>
 </html>

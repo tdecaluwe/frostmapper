@@ -142,6 +142,16 @@ html, body {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   color: #edf2fa;
+  font-size: 13px;
+}
+
+#projection-picker option {
+  background: #14182a;
+  color: #edf2fa;
+}
+
+#projection-picker option:disabled {
+  color: rgba(237, 242, 250, 0.3);
 }
 
 .ol-attribution {
@@ -153,14 +163,52 @@ html, body {
   background: #f5a623;
 }
 
-.basemap-dot.germany {
-  background: #4a90d9;
-}
-
 .basemap-dot.austria {
-  background: #e74c3c;
+  background: #a0a0a0;
 }
 
 .basemap-dot.italy {
   background: #27ae60;
+}
+
+.scalebar {
+  position: absolute;
+  bottom: 24px;
+  left: 12px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.scalebar-track {
+  height: 6px;
+  min-width: 40px;
+  max-width: 200px;
+  background: repeating-linear-gradient(
+    90deg,
+    #000 0, #000 25%,
+    #fff 25%, #fff 50%
+  );
+  background-size: 50% 100%;
+  border: 1px solid #000;
+  box-shadow: 0 0 0 1px #fff;
+}
+
+.scalebar-text {
+  display: flex;
+  justify-content: space-between;
+  line-height: 1;
+}
+
+.scalebar-text span {
+  font-size: 10px;
+  font-weight: 600;
+  color: #000;
+  text-shadow:
+    -1px -1px 0 #fff,
+    1px -1px 0 #fff,
+    -1px 1px 0 #fff,
+    1px 1px 0 #fff;
 }

@@ -1,0 +1,111 @@
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=diamond +step +proj=affine +s11=0 +s12=-1 +s21=1 +s22=0" /tmp/grieger.png
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=diamond +step +proj=affine +s11=0 +s12=-1 +s21=1 +s22=0
+Traceback (most recent call last):
+  File "/home/tom/git/frostmapper/PROJ/upstream/docs/plot/plot.py", line 374, in <module>
+    sys.exit(main(**vars(args)))
+             ~~~~^^^^^^^^^^^^^^
+  File "/home/tom/git/frostmapper/PROJ/upstream/docs/plot/plot.py", line 354, in main
+    plotproj(plotdef, data[(plotdef["type"], plotdef["res"])], outdir)
+                      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: ('poly', 'high')
+tom@marcdc-thomasmore:~/git/frostmapper$ nano PROJ/upstream/docs/plot/plot.py 
+tom@marcdc-thomasmore:~/git/frostmapper$ nano PROJ/render.sh 
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=diamond +step +proj=affine +s11=0 +s12=-1 +s21=1 +s22=0" /tmp/grieger.png
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=diamond +step +proj=affine +s11=0 +s12=-1 +s21=1 +s22=0
+tom@marcdc-thomasmore:~/git/frostmapper$ xdg-open /tmp/grieger.png
+tom@marcdc-thomasmore:~/git/frostmapper$ nano PROJ/render.sh 
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=diamond +step +proj=affine +s11=0 +s12=-1 +s21=1 +s22=0" /tmp/grieger.png
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=diamond +step +proj=affine +s11=0 +s12=-1 +s21=1 +s22=0
+tom@marcdc-thomasmore:~/git/frostmapper$ xdg-open /tmp/grieger.png
+tom@marcdc-thomasmore:~/git/frostmapper$ nano PROJ/render.sh 
+tom@marcdc-thomasmore:~/git/frostmapper$ nano PROJ/upstream/docs/plot/plot.py 
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=0 +s12=-1 +s21=1 +s22=0" /
+tmp/grieger.png
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=0 +s12=-1 +s21=1 +s22=0
+tom@marcdc-thomasmore:~/git/frostmapper$ xdg-open /tmp/grieger.png
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=0 +s12=-1 +s21=1 +s22=0" /tmp/grieger.png
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=0 +s12=-1 +s21=1 +s22=0
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=0 +s12=1 +s21=-1 +s22=0" /
+tmp/grieger.png
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=0 +s12=1 +s21=-1 +s22=0
+tom@marcdc-thomasmore:~/git/frostmapper$ xdg-open /tmp/grieger.png
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=1 +s12=-1 +s21=1 +s22=1" /
+tmp/grieger.png
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=1 +s12=-1 +s21=1 +s22=1
+tom@marcdc-thomasmore:~/git/frostmapper$ xdg-open /tmp/grieger.png
+tom@marcdc-thomasmore:~/git/frostmapper$ xdg-open /tmp/grieger.png
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=1 +s12=1 +s21=-1 +s22=1" /
+tmp/grieger.png
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=1 +s12=1 +s21=-1 +s22=1
+tom@marcdc-thomasmore:~/git/frostmapper$ xdg-open /tmp/grieger.png
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=-1 +s12=-1 +s21=-1 +s22=1"
+ /tmp/grieger.png
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=-1 +s12=-1 +s21=-1 +s22=1
+tom@marcdc-thomasmore:~/git/frostmapper$ xdg-open /tmp/grieger.png
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=-1 +s12=1 +s21=-1 +s22=-1"
+ /tmp/grieger.png; xdg-open /tmp/o
+oh-my-opencode.log            opencode_debug_after_pin.txt  
+opencode_current_version.txt  opencode_upgrade_full.log     
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=-1 +s12=1 +s21=-1 +s22=-1" /tmp/grieger.png; xdg-open /tmp/grieger.png 
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=-1 +s12=1 +s21=-1 +s22=-1
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=-1 +s12=1 +s21=-1 +s22=-1 +xoff=1" /tmp/grieger.png; xdg-open /tmp/grieger.png 
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square +step +proj=affine +s11=-1 +s12=1 +s21=-1 +s22=-1 +xoff=1
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square" /tmp/grieger.png; xdg-open /tmp/grieger.png 
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=45 +shape=square
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=45 +o_lon_p=45 +shape=square" /tmp/grieger.png; xdg-open /tmp/grieger.png 
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=45 +o_lon_p=45 +shape=square
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=0 +shape=square" /tmp/grieger.png; xdg-open /tmp/grieger.png 
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=0 +shape=square
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=45 +o_lon_p=0 +shape=square" /tmp/grieger.png; xdg-open /tmp/grieger.png 
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=45 +o_lon_p=0 +shape=square
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=45 +o_lon_p=0 +shape=square" /tmp/grieger.png; xdg-open /tmp/grieger.png 
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=45 +o_lon_p=0 +shape=square
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=0 +shape=square" /tmp/grieger.png; xdg-open /tmp/grieger.png 
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=0 +shape=square
+tom@marcdc-thomasmore:~/git/frostmapper$ echo 45 45 | proj +ob_tran +proj=affine +s11=1 +s12=0 +s21=
+0 +s22=1 +o_lat_p=-45 +o_lon_p=45
+Rel. 9.6.0, March 15th, 2025
+<proj>: 
+can't initialize operations that take non-angular input coordinates. Try cct.
+program abnormally terminated
+tom@marcdc-thomasmore:~/git/frostmapper$ echo 0 90 | proj +ob_tran +proj=affine +s11=1 +s12=0 +s21=0
+ +s22=1 +o_lat_p=-45 +o_lon_p=45
+Rel. 9.6.0, March 15th, 2025
+<proj>: 
+can't initialize operations that take non-angular input coordinates. Try cct.
+program abnormally terminated
+tom@marcdc-thomasmore:~/git/frostmapper$ echo 0 90 | proj +ob_tran +proj=identity +o_lat_p=45 +o_lon
+_p=45
+proj_create: Error 1027 (Invalid value for an argument): Unknown projection
+Rel. 9.6.0, March 15th, 2025
+<proj>: 
+projection initialization failure
+cause: Invalid value for an argument
+program abnormally terminated
+tom@marcdc-thomasmore:~/git/frostmapper$ echo 0 90 | proj +ob_tran +proj=latlon +o_lat_p=45 +o_lon_p
+=45
+Rel. 9.6.0, March 15th, 2025
+<proj>: 
+can't initialize operations that produce angular output coordinates
+program abnormally terminated
+tom@marcdc-thomasmore:~/git/frostmapper$ ./PROJ/render.sh "+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +shape=square +o_lat_p=-45 +o_lon_p=0 +shape=square" /tmp/grieger.png; xdg-open /tmp/grie
+ger.png 
+Rel. 9.6.0, March 15th, 2025
+0: 'grieger.png' +proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +shape=square +o_lat_p=-45 +o_lon_p=0 +shape=square

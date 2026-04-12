@@ -1,0 +1,29 @@
+{
+  "name": "frostmapper",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:browser": "playwright test",
+    "test:all": "vitest run && playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "d3-geo": "^3.1.1",
+    "d3-geo-projection": "^4.0.0",
+    "proj4": "^2.20.4",
+    "serve": "^14.2.6",
+    "vite": "^8.0.3",
+    "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "oh-my-opencode-linux-x64": "^3.13.1",
+    "ol": "^10.8.0"
+  }
+}

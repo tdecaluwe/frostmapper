@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FrostMapper — Geo Scouting Tool</title>
+
+  <!-- MapLibre GL JS -->
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.css" />
+  <script src="https://unpkg.com/maplibre-gl@5.18.0/dist/maplibre-gl.js"></script>
+
+  <!-- proj4 (required by primitives.js for CRS transforms; must load before bootstrap module) -->
+  <script src="https://unpkg.com/proj4@2.20.4/dist/proj4.js"></script>
+
+  <!-- Vue 3 — dev build includes the runtime template compiler needed for DOM-template mode -->
+  <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      background: #1a1a2e;
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Overlay panels ── */
+    #app-overlay {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-height: calc(100vh - 24px);
+      overflow-y: auto;
+      width: 300px;
+      pointer-events: none;
+    }
+
+    #app-overlay > * { pointer-events: auto; }
+
+    /* Accordion panels */
+    .panel {
+      background: rgba(30, 30, 50, 0.92);
+      border-radius: 8px;
+      color: #e0e0e0;
+      font-size: 13px;
+      backdrop-filter: blur(8px);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      cursor: pointer;
+      user-select: none;
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.3px;
+      transition: background 0.15s;
+    }
+
+    .panel-header:hover { background: rgba(255,255,255,0.06); }
+
+    .panel-header .chevron {
+      transition: transform 0.2s;
+      font-size: 10px;
+      opacity: 0.5;
+    }
+
+    .panel-header .chevron.open { transform: rotate(90deg); }
+
+    .panel-body {
+      padding: 0 14px 12px;
+    }
+
+    /* Layer rows */
+    .layer-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .layer-row:last-child { border-bottom: none; }
+
+    .layer-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .layer-toggle {
+      appearance: none;
+      width: 32px;
+      height: 18px;
+      border-radius: 9px;
+      background: rgba(255,255,255,0.15);
+      position: relative;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+
+    .layer-toggle:checked { background: rgba(100, 200, 100, 0.6); }
+
+    .layer-toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.2s;
+    }
+
+    .layer-toggle:checked::after { transform: translateX(14px); }
+
+    .layer-name {
+      flex: 1;
+      font-size: 12px;
+    }
+
+    .layer-row.disabled { opacity: 0.4; }
+
+    .layer-progress {
+      width: 100%;
+      height: 2px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 1px;
+      margin-top: 2px;
+    }
+
+    .layer-progress-bar {
+      height: 100%;
+      border-radius: 1px;
+      transition: width 0.3s;
+    }
+
+    .layer-error-btn {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,100,100,0.4);
+      background: rgba(255,100,100,0.15);
+      color: #ff8888;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* Settings row */
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .setting-row:last-child { border-bottom: none; }
+
+    .setting-label { font-size: 12px; opacity: 0.7; }
+
+    .setting-value {
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 2px 8px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+
+    .setting-value:hover { background: rgba(255,255,255,0.1); }
+
+    .setting-input {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #e0e0e0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      width: 80px;
+      outline: none;
+    }
+
+    .setting-input:focus { border-color: rgba(100,180,255,0.5); }
+
+    /* Key status */
+    .key-status {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .key-status.set {
+      background: rgba(100, 200, 100, 0.2);
+      color: #88cc88;
+    }
+
+    .key-status.missing {
+      background: rgba(255, 100, 100, 0.2);
+      color: #ff8888;
+    }
+
+    .btn {
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 11px;
+      transition: background 0.15s;
+    }
+
+    .btn:hover { background: rgba(255,255,255,0.15); }
+
+    /* Master password modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .modal {
+      background: #1e1e32;
+      border-radius: 12px;
+      padding: 24px;
+      width: 340px;
+      color: #e0e0e0;
+    }
+
+    .modal h3 {
+      margin-bottom: 16px;
+      font-size: 16px;
+    }
+
+    .modal input {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
+      color: #e0e0e0;
+      font-size: 14px;
+      outline: none;
+      margin-bottom: 12px;
+    }
+
+    .modal input:focus { border-color: rgba(100,180,255,0.5); }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .modal .btn-primary {
+      background: rgba(100,180,255,0.3);
+      border-color: rgba(100,180,255,0.5);
+    }
+
+    .modal .btn-primary:hover { background: rgba(100,180,255,0.45); }
+
+    /* Layer params sub-section */
+    .layer-params {
+      padding: 6px 0 4px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .layer-params:last-child { border-bottom: none; }
+
+    .layer-param-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 3px 0;
+    }
+
+    .layer-param-label {
+      font-size: 11px;
+      opacity: 0.6;
+      flex-shrink: 0;
+    }
+
+    .layer-param-input {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #e0e0e0;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 11px;
+      width: 56px;
+      outline: none;
+    }
+
+    .layer-param-input:focus { border-color: rgba(100,180,255,0.5); }
+
+    /* Map attribution override */
+    .maplibregl-ctrl-attrib { font-size: 10px !important; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="ui">
+    <div id="app-overlay">
+
+      <!-- Layers Panel -->
+      <div class="panel">
+        <div class="panel-header" @click="appState.openPanel = appState.openPanel === 'layers' ? null : 'layers'">
+          <span>◉ Layers</span>
+          <span class="chevron" :class="{ open: appState.openPanel === 'layers' }">&#9654;</span>
+        </div>
+        <div class="panel-body" v-if="appState.openPanel === 'layers'">
+          <template v-for="(layer, key) in layers" :key="key">
+            <div
+              class="layer-row"
+              :class="{ disabled: layer.params.state === 'danger' || layer.params.state === 'locked' }"
+            >
+              <span
+                class="layer-dot"
+                :style="{ background: dotColor(layer), opacity: layer.params.enabled ? 1 : 0.3 }"
+              ></span>
+              <input
+                type="checkbox"
+                class="layer-toggle"
+                :checked="layer.params.enabled"
+                :disabled="layer.params.state === 'danger' || layer.params.state === 'locked'"
+                @change="toggleLayer(layer, $event.target.checked)"
+              />
+              <span class="layer-name">{{ layerLabel(key) }}</span>
+              <button
+                v-if="layer.params.state === 'danger'"
+                class="layer-error-btn"
+                @click.stop="showKeyInput('openrouteservice')"
+              >Add key</button>
+            </div>
+            <div class="layer-params" v-if="layer.isRasterLayer && layer.params.enabled && layer.params.valueRange">
+              <div class="layer-param-row">
+                <span class="layer-param-label">Min</span>
+                <input
+                  class="layer-param-input"
+                  type="number"
+                  :value="layer.params.valueRange.from"
+                  @change="layer.params.valueRange = { from: parseFloat($event.target.value), to: layer.params.valueRange.to }; renderer.refresh()"
+                />
+                <span class="layer-param-label">Max</span>
+                <input
+                  class="layer-param-input"
+                  type="number"
+                  :value="layer.params.valueRange.to"
+                  @change="layer.params.valueRange = { from: layer.params.valueRange.from, to: parseFloat($event.target.value) }; renderer.refresh()"
+                />
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Settings Panel -->
+      <div class="panel">
+        <div class="panel-header" @click="appState.openPanel = appState.openPanel === 'settings' ? null : 'settings'">
+          <span>⚙ Settings</span>
+          <span class="chevron" :class="{ open: appState.openPanel === 'settings' }">&#9654;</span>
+        </div>
+        <div class="panel-body" v-if="appState.openPanel === 'settings'">
+          <div class="setting-row">
+            <span class="setting-label">Time period (years)</span>
+            <input class="setting-input" type="number" min="1" max="60"
+              :value="appState.timePeriod"
+              @change="appState.timePeriod = parseInt($event.target.value)" />
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Winter start</span>
+            <input class="setting-input" type="text" placeholder="MM-DD"
+              :value="appState.winterPeriod.start"
+              @change="appState.winterPeriod.start = $event.target.value" />
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Winter end</span>
+            <input class="setting-input" type="text" placeholder="MM-DD"
+              :value="appState.winterPeriod.end"
+              @change="appState.winterPeriod.end = $event.target.value" />
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Percentile</span>
+            <input class="setting-input" type="number" min="1" max="99"
+              :value="appState.percentile"
+              @change="appState.percentile = parseInt($event.target.value)" />
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">Snow threshold (cm)</span>
+            <select class="setting-input" style="width:auto;"
+              :value="appState.snowThreshold"
+              @change="appState.snowThreshold = parseInt($event.target.value)">
+              <option value="5">5 cm</option>
+              <option value="10">10 cm</option>
+              <option value="15">15 cm</option>
+              <option value="20">20 cm</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Keys Panel -->
+      <div class="panel">
+        <div class="panel-header" @click="appState.openPanel = appState.openPanel === 'keys' ? null : 'keys'">
+          <span>🔑 API Keys</span>
+          <span class="chevron" :class="{ open: appState.openPanel === 'keys' }">&#9654;</span>
+        </div>
+        <div class="panel-body" v-if="appState.openPanel === 'keys'">
+          <div class="setting-row">
+            <span class="setting-label">Lantmäteriet</span>
+            <span :class="['key-status', appState.keyStatus?.lantmateriet ? 'set' : 'missing']">
+              {{ appState.keyStatus?.lantmateriet ? 'Set' : 'Missing' }}
+            </span>
+            <button class="btn" style="margin-left:8px;" @click="showKeyInput('lantmateriet')">
+              {{ appState.keyStatus?.lantmateriet ? 'Update' : 'Set' }}
+            </button>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">OpenRouteService</span>
+            <span :class="['key-status', appState.keyStatus?.openrouteservice ? 'set' : 'missing']">
+              {{ appState.keyStatus?.openrouteservice ? 'Set' : 'Missing' }}
+            </span>
+            <button class="btn" style="margin-left:8px;" @click="showKeyInput('openrouteservice')">
+              {{ appState.keyStatus?.openrouteservice ? 'Update' : 'Set' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Keystore / key-entry modal -->
+      <div class="modal-backdrop" v-if="appState.showPasswordModal" @click.self="appState.showPasswordModal = false">
+        <div class="modal">
+          <h3 v-if="appState.passwordModalMode === 'init'">Create Master Password</h3>
+          <h3 v-else-if="appState.passwordModalMode === 'unlock'">Unlock Keystore</h3>
+          <h3 v-else>{{ appState.editingKeyId === 'lantmateriet' ? 'Lantmäteriet Token' : 'OpenRouteService Key' }}</h3>
+
+          <p v-if="appState.passwordModalMode === 'init'" style="font-size:12px; opacity:0.7; margin-bottom:12px;">
+            Choose a master password to encrypt your API keys locally.
+          </p>
+
+          <p v-if="appState.passwordError" style="color:#ff6666; font-size:12px; margin-bottom:8px;">
+            {{ appState.passwordError }}
+          </p>
+
+          <template v-if="appState.passwordModalMode !== 'key'">
+            <input
+              type="password"
+              placeholder="Master password"
+              @keydown.enter="handlePasswordSubmit($event.target.value)"
+              ref="passwordInput"
+            />
+            <div class="modal-actions">
+              <button class="btn" @click="appState.showPasswordModal = false">Skip</button>
+              <button class="btn btn-primary" @click="handlePasswordSubmit($refs.passwordInput?.value)">
+                {{ appState.passwordModalMode === 'init' ? 'Create' : 'Unlock' }}
+              </button>
+            </div>
+          </template>
+
+          <template v-else>
+            <input
+              type="text"
+              :placeholder="appState.editingKeyId === 'lantmateriet' ? 'Paste token...' : 'Paste API key...'"
+              @keydown.enter="handleKeySubmit(appState.editingKeyId, $event.target.value)"
+              ref="keyInput"
+            />
+            <div class="modal-actions">
+              <button class="btn" @click="appState.showPasswordModal = false">Cancel</button>
+              <button class="btn btn-primary" @click="handleKeySubmit(appState.editingKeyId, $refs.keyInput?.value)">
+                Save
+              </button>
+            </div>
+          </template>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module" src="src/core/bootstrap.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "passengers": [
+    { "iata": "OSL", "name": "Oslo Gardermoen", "passengers": 28500000, "latitude": 60.1939, "longitude": 11.1004, "country": "Norway" },
+    { "iata": "BGO", "name": "Bergen Flesland", "passengers": 6300000, "latitude": 60.2934, "longitude": 5.2181, "country": "Norway" },
+    { "iata": "SVG", "name": "Stavanger Sola", "passengers": 4400000, "latitude": 58.8767, "longitude": 5.6378, "country": "Norway" },
+    { "iata": "TRD", "name": "Trondheim Værnes", "passengers": 4500000, "latitude": 63.4578, "longitude": 10.924, "country": "Norway" },
+    { "iata": "TOS", "name": "Tromsø Langnes", "passengers": 2200000, "latitude": 69.6833, "longitude": 18.9189, "country": "Norway" },
+    { "iata": "BOO", "name": "Bodø", "passengers": 1800000, "latitude": 67.2692, "longitude": 14.3653, "country": "Norway" },
+    { "iata": "AES", "name": "Ålesund Vigra", "passengers": 1100000, "latitude": 62.5625, "longitude": 6.1197, "country": "Norway" },
+    { "iata": "HAU", "name": "Haugesund Karmøy", "passengers": 700000, "latitude": 59.3453, "longitude": 5.2083, "country": "Norway" },
+    { "iata": "KRS", "name": "Kristiansand Kjevik", "passengers": 1100000, "latitude": 58.2042, "longitude": 8.0853, "country": "Norway" },
+    { "iata": "MOL", "name": "Molde Årø", "passengers": 450000, "latitude": 62.7447, "longitude": 7.2625, "country": "Norway" },
+    { "iata": "EVE", "name": "Harstad/Narvik Evenes", "passengers": 700000, "latitude": 68.4913, "longitude": 16.6781, "country": "Norway" },
+    { "iata": "ALF", "name": "Alta", "passengers": 400000, "latitude": 69.9761, "longitude": 23.3717, "country": "Norway" },
+    { "iata": "KKN", "name": "Kirkenes Høybuktmoen", "passengers": 300000, "latitude": 69.7258, "longitude": 29.8913, "country": "Norway" },
+    { "iata": "ARN", "name": "Stockholm Arlanda", "passengers": 26500000, "latitude": 59.6519, "longitude": 17.9186, "country": "Sweden" },
+    { "iata": "GOT", "name": "Göteborg Landvetter", "passengers": 6800000, "latitude": 57.6628, "longitude": 12.2798, "country": "Sweden" },
+    { "iata": "MMX", "name": "Malmö Sturup", "passengers": 2400000, "latitude": 55.5363, "longitude": 13.3762, "country": "Sweden" },
+    { "iata": "LLA", "name": "Luleå Kallax", "passengers": 1100000, "latitude": 65.5438, "longitude": 22.1220, "country": "Sweden" },
+    { "iata": "UME", "name": "Umeå", "passengers": 1000000, "latitude": 63.7918, "longitude": 20.2828, "country": "Sweden" },
+    { "iata": "OSD", "name": "Östersund Åre", "passengers": 450000, "latitude": 63.1944, "longitude": 14.5003, "country": "Sweden" },
+    { "iata": "KRN", "name": "Kiruna", "passengers": 250000, "latitude": 67.8220, "longitude": 20.3368, "country": "Sweden" },
+    { "iata": "HEL", "name": "Helsinki-Vantaa", "passengers": 22000000, "latitude": 60.3172, "longitude": 24.9633, "country": "Finland" },
+    { "iata": "CPH", "name": "Copenhagen Kastrup", "passengers": 30300000, "latitude": 55.6181, "longitude": 12.6561, "country": "Denmark" }
+  ]
+}
