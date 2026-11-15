@@ -13,3 +13,5 @@ import {attachScale} from './map/controls/scale.js'
 attachScale(map)
 import {nationalLayer,swiss} from './map/layers/national.js'
 nationalLayer(map,{name:'Switzerland',border:'ch',source:swiss})
+import {france} from './map/layers/national.js'
+nationalLayer(map,{name:'France',border:'fr',source:france})
