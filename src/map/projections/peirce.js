@@ -181,12 +181,13 @@ export function registerAffine(proj4) {
   proj4.Proj.projections.add({
     names: ['affine'],
     init() {
-      this.s11 = this.s11 ?? 1
-      this.s12 = this.s12 ?? 0
-      this.s21 = this.s21 ?? 0
-      this.s22 = this.s22 ?? 1
+      this.s11 = Number(this.s11 ?? 1)
+      this.s12 = Number(this.s12 ?? 0)
+      this.s21 = Number(this.s21 ?? 0)
+      this.s22 = Number(this.s22 ?? 1)
       this.x0 = this.x0 ?? 0
       this.y0 = this.y0 ?? 0
+      if (![this.s11,this.s12,this.s21,this.s22,this.x0,this.y0].every(Number.isFinite) || this.s11*this.s22-this.s12*this.s21 === 0) throw new Error('Invalid affine matrix')
     },
     forward(point) {
       return {
@@ -237,13 +238,15 @@ export function registerPipeline(proj4) {
   })
 }
 
-export function registerGrieger(proj4, {k_0 = PEIRCE_METERS_PER_UNIT} = {}) {
-  proj4.defs(GRIEGER_CODE, {
-    projName: 'pipeline',
-    projStr: '+proj=pipeline +step +proj=ob_tran +o_proj=peirce_q +o_lat_p=-45 +o_lon_p=0 +o_scrollx=-0.25 +k_0=' + k_0 + ' +step +proj=affine +s11=-1 +s12=0 +s21=0 +s22=-1',
-    title: 'Grieger Triptychial',
-  })
-  return GRIEGER_CODE
+// proj4js flattens repeated +proj and +step tokens. Preserve the raw pipeline
+// by registering a named definition; use that name in transformations.
+export function definePipeline(proj4, code, definition) {
+  const parts=definition.split(/\+step\b/)
+  if (!/^\s*\+proj=pipeline\s*$/.test(parts[0]) || parts.length < 2 || parts.slice(1).some(part=>!part.trim())) throw new Error('Invalid pipeline definition')
+  proj4.defs(code,{projName:'pipeline',projStr:definition})
+  // Validate immediately rather than leaving an unusable definition registered.
+  try { proj4.Proj(code) } catch (error) { delete proj4.defs[code]; throw error }
+  return code
 }
 
 function reval(nodes, values, weights) {

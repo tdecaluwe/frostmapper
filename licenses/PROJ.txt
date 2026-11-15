@@ -1,4 +1,4 @@
-Peirce Quincuncial forward equations adapted from PROJ src/projections/adams.cpp.
+Peirce Quincuncial forward equations and oblique rotation adapted from PROJ src/projections/adams.cpp and src/projections/ob_tran.cpp.
 Copyright (c) 2005, 2006, 2009 Gerald I. Evenden
 Copyright (c) 2020 Kristian Evers
 Copyright (c) 2021 Toby C Wilkinson
