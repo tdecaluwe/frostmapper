@@ -1,1 +1,4 @@
 html,body,#map{width:100%;height:100%;margin:0}body{font:14px system-ui,sans-serif}#map{position:absolute;inset:0;background:#dce6e9}aside{position:absolute;right:1rem;top:1rem;background:#fffe;padding:1rem;border-radius:.6rem;box-shadow:0 2px 12px #0003;display:grid;gap:.6rem;max-width:45vw}aside strong{font-size:1.1rem}aside label{display:block}#layers label{display:block;margin:.35rem 0}#scale{position:absolute;bottom:2rem;left:.75rem;background:#fffe;padding:.35rem;border-radius:.2rem}#scale-bar{height:5px;border:solid #222;border-width:0 1px 2px}#scale-label{font-size:12px}.ol-attribution{max-width:70%}
+
+/* Let OpenLayers handle map gestures instead of browser panning. */
+#map .ol-viewport{touch-action:none}
