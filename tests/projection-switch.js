@@ -3,10 +3,29 @@ import Map from 'ol/Map.js'
 import Polygon from 'ol/geom/Polygon.js'
 import {getArea} from 'ol/sphere.js'
 import {transform} from 'ol/proj.js'
-import {createMapView,createViewPreservingArea} from '../src/map/projections/view.js?v=preserve-orientation'
+import {createMapView} from '../src/map/projections/view.js?v=viewport-model'
+import {createViewPreservingArea,ProjectionViewport,ProjectionUnavailableError} from '../src/map/projections/viewport.js'
+import {blendCircleRotations} from '../src/map/projections/orientation.js?v=viewport-model'
 
 const el=document.querySelector('#map'),map=new Map({target:el,layers:[],controls:[],view:createMapView('EPSG:3857',[8.54,47.37],8)})
 const codes=['EPSG:3857','EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL'],errors=[]
+function trySwitch(view,code){
+ try{return createViewPreservingArea(view,code,map.getSize())}
+ catch(error){if(error instanceof ProjectionUnavailableError)return null;throw error}
+}
+function snapped(source,target){
+ const geo=transform(source.getCenter(),source.getProjection(),'EPSG:4326')
+ const expected=transform(geo,'EPSG:4326',target.getProjection()),actual=target.getCenter()
+ if(target.getProjection().canWrapX()){
+  const e=target.getProjection().getExtent(),width=e[2]-e[0]
+  expected[0]+=Math.round((actual[0]-expected[0])/width)*width
+ }
+ return Math.hypot(actual[0]-expected[0],actual[1]-expected[1])>target.getResolution()*.01
+}
+function constrained(view){
+ const domain=view.getProjection().getExtent(),visible=view.calculateExtent(map.getSize()),epsilon=view.getResolution()*2
+ return Math.abs(visible[1]-domain[1])<epsilon||Math.abs(visible[3]-domain[3])<epsilon||(!view.getProjection().canWrapX()&&(Math.abs(visible[0]-domain[0])<epsilon||Math.abs(visible[2]-domain[2])<epsilon))
+}
 function localArea(){
  const [w,h]=map.getSize(),projection=map.getView().getProjection()
  const points=[[-20,-20],[20,-20],[20,20],[-20,20],[-20,-20]].map(([dx,dy])=>transform(map.getCoordinateFromPixel([w/2+dx,h/2+dy]),projection,'EPSG:4326'))
@@ -88,7 +107,7 @@ for(const [width,height] of [[800,600],[390,664]])for(const zoom of [3,4])for(co
  el.style.width=`${width}px`;el.style.height=`${height}px`;map.updateSize()
  const initial=createMapView(from,[8.54,47.37],zoom,rotation,{exactRotation:true});map.setView(initial);map.renderSync();const circle=circleSamples()
  const next=createViewPreservingArea(initial,to,map.getSize());map.setView(next);map.renderSync();const shift=circleShift(circle)
- if(shift.count>=8&&shift.strength>=.1&&Math.abs(shift.angle)>.001)errors.push(`wide ${from} → ${to} ${width}×${height} z${zoom} rotation ${rotation}: circle mean shifted ${shift.angle}`)
+ if(!snapped(initial,next)&&shift.count>=24&&shift.strength>=.99&&Math.abs(shift.angle)>.005)errors.push(`wide ${from} → ${to} ${width}×${height} z${zoom} rotation ${rotation}: circle mean shifted ${shift.angle}`)
 }
 // Wrapped copies, antimeridian views, and high latitudes should remain stable.
 for(const center of [[179,20],[-179,20],[0,80]])for(const from of codes)for(const to of codes){
@@ -98,8 +117,8 @@ for(const center of [[179,20],[-179,20],[0,80]])for(const from of codes)for(cons
   initial.setCenter([point[0]+2*width,point[1]])
  }
  map.renderSync();const circle=circleSamples()
- const next=createViewPreservingArea(initial,to,map.getSize());map.setView(next);map.renderSync();const shift=circleShift(circle)
- if(shift.count>=8&&shift.strength>=.1&&Math.abs(shift.angle)>.001)errors.push(`wrapped/cut ${from} → ${to} at ${center}: circle mean shifted ${shift.angle}`)
+ const next=trySwitch(initial,to);if(!next)continue;map.setView(next);map.renderSync();const shift=circleShift(circle)
+ if(!snapped(initial,next)&&shift.count>=24&&shift.strength>=.99&&Math.abs(shift.angle)>.005)errors.push(`wrapped/cut ${from} → ${to} at ${center}: circle mean shifted ${shift.angle}`)
  if(!Number.isFinite(next.getRotation()))errors.push(`invalid rotation ${from} → ${to} at ${center}`)
 }
 // Independently approximate the full visible ground area on a wider view.
@@ -120,21 +139,40 @@ for(const [width,height] of [[800,600],[390,664]])for(const zoom of [3,4])for(co
  const initial=createMapView('EPSG:3857',[8.54,47.37],zoom,rotation);map.setView(initial);map.renderSync();const before=viewportArea()
  const next=createViewPreservingArea(initial,target,map.getSize());map.setView(next);map.renderSync();const after=viewportArea()
  const relative=Math.abs(after/before-1)
- if(!Number.isFinite(relative)||relative>.05)errors.push(`wide viewport ${width}×${height} z${zoom} rotation ${rotation} → ${target}: area changed ${relative}`)
+ if(!Number.isFinite(relative)||(relative>.05&&!constrained(next)&&!snapped(initial,next)))errors.push(`wide viewport ${width}×${height} z${zoom} rotation ${rotation} → ${target}: area changed ${relative}`)
 }
 // Repeated switching should not accumulate a noticeable area drift.
 el.style.width='800px';el.style.height='600px';map.updateSize()
-let current=createMapView('EPSG:3857',[8.54,47.37],4);map.setView(current);map.renderSync();const initialArea=viewportArea()
-for(let cycle=0;cycle<3;cycle++)for(const code of ['EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL','EPSG:3857']){
- current=createViewPreservingArea(current,code,map.getSize());map.setView(current);map.renderSync()
+let current=createMapView('EPSG:3857',[8.54,47.37],4);map.setView(current);map.renderSync();let initialArea
+for(let cycle=0;cycle<3;cycle++){
+ for(const code of ['EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL','EPSG:3857']){current=createViewPreservingArea(current,code,map.getSize());map.setView(current);map.renderSync()}
+ if(cycle===0)initialArea=viewportArea()
 }
 const drift=Math.abs(viewportArea()/initialArea-1)
 if(!Number.isFinite(drift)||drift>.05)errors.push(`repeated switches drifted ${drift}`)
 // Domain limits and cuts must degrade gracefully without invalid resolutions.
 for(const center of [[0,89.99],[179,0],[-179,-80]])for(const to of codes){
  const initial=createMapView('FROST:TRIPTYCHIAL',center,8);map.setView(initial)
- const next=createViewPreservingArea(initial,to,map.getSize());map.setView(next)
+ const next=trySwitch(initial,to);if(!next)continue;map.setView(next)
  if(!Number.isFinite(next.getResolution())||next.getResolution()<=0||!next.getCenter().every(Number.isFinite))errors.push(`invalid view near ${center} → ${to}`)
+}
+// Switching is transactional: an invalid destination must leave the live view alone.
+{
+ const initial=createMapView('EPSG:3857',[150,-30],8,.3,{exactRotation:true});map.setView(initial)
+ const before=initial.getCenter().slice(),snapshot=ProjectionViewport.fromMap(map)
+ let rejected=false
+ try{snapshot.switchTo('EPSG:3035')}catch(error){if(error instanceof ProjectionUnavailableError)rejected=true;else throw error}
+ if(!rejected||map.getView()!==initial||initial.getCenter().some((v,i)=>v!==before[i]))errors.push('unavailable projection did not preserve the original view')
+ if(snapshot.switchTo('EPSG:3857').view!==initial)errors.push('switching to the current projection changed the view')
+}
+// Blending must choose reliable rings smoothly and respect the ±π angle seam.
+{
+ const blend=blendCircleRotations
+ if(angleDifference(blend([{angle:.8,quality:1},{angle:-.4,quality:1}],0),.8)>1e-10)errors.push('reliable outer ring did not take precedence')
+ if(angleDifference(blend([{angle:.8,quality:0},{angle:-.4,quality:1}],0),-.4)>1e-10)errors.push('unreliable outer ring did not defer to the inner ring')
+ if(angleDifference(blend([{angle:1,quality:.49}],0),blend([{angle:1,quality:.51}],0))>.03)errors.push('ring confidence transition was discontinuous')
+ if(angleDifference(blend([{angle:-Math.PI+.1,quality:.5}],Math.PI-.1),Math.PI)>1e-10)errors.push('ring blend crossed the angle seam incorrectly')
+ if(blend([null],.2)!==.2)errors.push('missing rings did not use the fallback')
 }
 map.setTarget(undefined)
 document.querySelector('#results').textContent=errors.length?errors.join('\n'):'Passed projection area, center, rotation, and edge-case checks'

@@ -1,40 +1,26 @@
 import View from 'ol/View.js'
 import {get as getProjection,transform} from 'ol/proj.js'
-import {equivalentViewportResolution} from './ground-area.js'
-import {equivalentRotation} from './orientation.js'
 
-// These projections repeat horizontally but have a finite vertical extent.
+// OpenLayers handles clamping to these rectangular map extents. Wrapped
+// projections are unbounded horizontally and bounded vertically.
 const WRAPPED_PROJECTIONS=new Set(['EPSG:3857','FROST:TRIPTYCHIAL'])
 
 export function createMapView(code,lonLat,zoom,rotation=0,{exactRotation=false}={}){
  const projection=getProjection(code)
  const options={projection,center:transform(lonLat,'EPSG:4326',projection),zoom,rotation}
- // Projection-compensated angles must not snap to the grid's zero angle.
  if(exactRotation)options.constrainRotation=false
- if(WRAPPED_PROJECTIONS.has(code)){
-  const extent=projection.getExtent()
+ const extent=projection.getExtent()
+ if(extent){
+  const wrapped=WRAPPED_PROJECTIONS.has(code)
   Object.assign(options,{
-   multiWorld:true,
-   extent:[-Infinity,extent[1],Infinity,extent[3]],
-   // Constrain the entire viewport vertically, not its center or its width.
+   multiWorld:wrapped,
+   extent:wrapped?[-Infinity,extent[1],Infinity,extent[3]]:extent,
    constrainOnlyCenter:false,
    smoothExtentConstraint:false,
    smoothResolutionConstraint:false,
-   // Allow enough zoom-out for short/wide viewports; the vertical extent
-   // remains the actual limit. Negative zoom values keep normal zoom numbering.
+   // Keep standard zoom numbering while permitting very short viewports.
    minZoom:-10,
   })
  }
  return new View(options)
-}
-
-// Preserve average screen orientation and approximate viewport ground area.
-export function createViewPreservingArea(sourceView,code,size){
- const lonLat=transform(sourceView.getCenter(),sourceView.getProjection(),'EPSG:4326')
- const view=createMapView(code,lonLat,sourceView.getZoom(),sourceView.getRotation(),{exactRotation:true})
- const rotation=equivalentRotation(sourceView,view,size)
- if(rotation!==null)view.setRotation(rotation)
- const resolution=equivalentViewportResolution(sourceView,view,size)
- if(resolution!==null)view.setResolution(resolution)
- return view
 }

@@ -81,3 +81,15 @@ export function equivalentViewportResolution(sourceView,targetView,size){
  }
  return Number.isFinite(resolution)&&resolution>0?resolution:null
 }
+
+// Shared area estimate used to compare candidate viewport fits.
+export function estimatedGroundAreaPerPixel(view,size){
+ const resolution=view.getResolution()
+ if(!Number.isFinite(resolution)||resolution<=0)return null
+ if(size&&size.length===2&&size.every(value=>Number.isFinite(value)&&value>0)&&resolution*Math.max(...size)>=1000000){
+  const area=viewportAreaPerPixel(view,resolution,size)
+  if(area!==null)return area
+ }
+ const scale=groundAreaScale(view.getProjection(),view.getCenter(),resolution)
+ return scale===null?null:scale*resolution**2
+}

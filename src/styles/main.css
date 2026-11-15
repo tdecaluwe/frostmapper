@@ -2,3 +2,5 @@ html,body,#map{width:100%;height:100%;margin:0}body{font:14px system-ui,sans-ser
 
 /* Let OpenLayers handle map gestures instead of browser panning. */
 #map .ol-viewport{touch-action:none}
+
+#projection-status{margin:0;color:#8a2600;max-width:20rem}

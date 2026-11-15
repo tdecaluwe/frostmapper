@@ -3,7 +3,8 @@ import Map from 'ol/Map.js'
 import {defaults as defaultInteractions} from 'ol/interaction/defaults.js'
 import TileLayer from 'ol/layer/Tile.js'
 import XYZ from 'ol/source/XYZ.js'
-import {createMapView,createViewPreservingArea} from './map/projections/view.js?v=preserve-orientation'
+import {createMapView} from './map/projections/view.js?v=viewport-model'
+import {ProjectionViewport,ProjectionUnavailableError} from './map/projections/viewport.js'
 import {guardReprojection} from './map/layers/reprojection-budget.js?v=stitch-scaling'
 const baseSource=new XYZ({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})
 guardReprojection(baseSource)
@@ -21,4 +22,13 @@ nationalLayer(map,{name:'France',border:'fr',source:france})
 import {norway} from './map/layers/national.js?v=fill-viewport'
 nationalLayer(map,{name:'Norway',border:'no',source:norway})
 
-document.querySelector('#projection').addEventListener('change',e=>{map.setView(createViewPreservingArea(map.getView(),e.target.value,map.getSize()))})
+document.querySelector('#projection').addEventListener('change',event=>{
+ const selector=event.target,status=document.querySelector('#projection-status'),previous=map.getView().getProjection().getCode()
+ try{
+  const next=ProjectionViewport.fromMap(map).switchTo(selector.value)
+  map.setView(next.view);status.hidden=true;status.textContent=''
+ }catch(error){
+  if(!(error instanceof ProjectionUnavailableError))throw error
+  selector.value=previous;status.textContent=error.message;status.hidden=false
+ }
+})
