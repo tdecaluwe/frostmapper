@@ -5,7 +5,10 @@ import {defaults as defaultInteractions} from 'ol/interaction/defaults.js'
 import TileLayer from 'ol/layer/Tile.js'
 import XYZ from 'ol/source/XYZ.js'
 import {fromLonLat} from 'ol/proj.js'
-const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({preload:2,cacheSize:16384,source:new XYZ({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})})],view:new View({center:fromLonLat([10,50]),zoom:4})})
+import {guardPolarReprojection} from './map/layers/polar-guard.js'
+const baseSource=new XYZ({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})
+guardPolarReprojection(baseSource)
+const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({preload:2,cacheSize:16384,source:baseSource})],view:new View({center:fromLonLat([10,50]),zoom:4})})
 import {readState,syncUrl} from './map/state/url.js'
 import {transform} from 'ol/proj.js'
 function applyState(s){const code=['EPSG:3857','EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL'].includes(s.projection)?s.projection:'EPSG:3857';const v=new View({projection:code,center:transform(s.center,'EPSG:4326',code),zoom:s.zoom,rotation:s.rotation});map.setView(v);document.querySelector('#projection').value=code}
@@ -13,11 +16,11 @@ const initial=readState(); if(initial) applyState(initial)
 syncUrl(map,applyState)
 import {attachScale} from './map/controls/scale.js'
 attachScale(map)
-import {nationalLayer,swiss} from './map/layers/national.js'
+import {nationalLayer,swiss} from './map/layers/national.js?v=pole-overlays'
 nationalLayer(map,{name:'Switzerland',border:'ch',source:swiss})
-import {france} from './map/layers/national.js'
+import {france} from './map/layers/national.js?v=pole-overlays'
 nationalLayer(map,{name:'France',border:'fr',source:france})
-import {norway} from './map/layers/national.js'
+import {norway} from './map/layers/national.js?v=pole-overlays'
 nationalLayer(map,{name:'Norway',border:'no',source:norway})
 
 document.querySelector('#projection').addEventListener('change',e=>{const v=map.getView();applyState({projection:e.target.value,center:transform(v.getCenter(),v.getProjection(),'EPSG:4326'),zoom:v.getZoom(),rotation:v.getRotation()})})
