@@ -9,3 +9,5 @@ import {transform} from 'ol/proj.js'
 function applyState(s){const v=map.getView();v.setCenter(transform(s.center,'EPSG:4326',v.getProjection()));v.setZoom(s.zoom);v.setRotation(s.rotation)}
 const initial=readState(); if(initial) applyState(initial)
 syncUrl(map,applyState)
+import {attachScale} from './map/controls/scale.js'
+attachScale(map)
