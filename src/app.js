@@ -5,7 +5,7 @@ import {defaults as defaultInteractions} from 'ol/interaction/defaults.js'
 import TileLayer from 'ol/layer/Tile.js'
 import XYZ from 'ol/source/XYZ.js'
 import {fromLonLat} from 'ol/proj.js'
-import {guardReprojection} from './map/layers/reprojection-budget.js'
+import {guardReprojection} from './map/layers/reprojection-budget.js?v=triangulation-reuse'
 const baseSource=new XYZ({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})
 guardReprojection(baseSource)
 const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({preload:2,cacheSize:16384,source:baseSource})],view:new View({center:fromLonLat([10,50]),zoom:4})})
@@ -16,11 +16,11 @@ const initial=readState(); if(initial) applyState(initial)
 syncUrl(map,applyState)
 import {attachScale} from './map/controls/scale.js'
 attachScale(map)
-import {nationalLayer,swiss} from './map/layers/national.js?v=reprojection-budget'
+import {nationalLayer,swiss} from './map/layers/national.js?v=triangulation-reuse'
 nationalLayer(map,{name:'Switzerland',border:'ch',source:swiss})
-import {france} from './map/layers/national.js?v=reprojection-budget'
+import {france} from './map/layers/national.js?v=triangulation-reuse'
 nationalLayer(map,{name:'France',border:'fr',source:france})
-import {norway} from './map/layers/national.js?v=reprojection-budget'
+import {norway} from './map/layers/national.js?v=triangulation-reuse'
 nationalLayer(map,{name:'Norway',border:'no',source:norway})
 
 document.querySelector('#projection').addEventListener('change',e=>{const v=map.getView();applyState({projection:e.target.value,center:transform(v.getCenter(),v.getProjection(),'EPSG:4326'),zoom:v.getZoom(),rotation:v.getRotation()})})

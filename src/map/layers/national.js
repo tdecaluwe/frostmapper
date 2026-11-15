@@ -3,7 +3,7 @@ import XYZ from 'ol/source/XYZ.js'
 import WMTS,{optionsFromCapabilities} from 'ol/source/WMTS.js'
 import WMTSCapabilities from 'ol/format/WMTSCapabilities.js'
 import WMTSTileGrid from 'ol/tilegrid/WMTS.js'
-import {guardReprojection} from './reprojection-budget.js'
+import {guardReprojection} from './reprojection-budget.js?v=triangulation-reuse'
 import {clipLayer,restrictTileRequests} from './clip.js?v=pole-overlays'
 export function nationalLayer(map,{name,border,source}){const layer=new TileLayer({visible:false,preload:2,cacheSize:16384});map.addLayer(layer);const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';label.append(input,` ${name}`);document.querySelector('#layers').append(label);input.disabled=true;Promise.all([clipLayer(map,layer,new URL(`../../../data/${border}.geojson`,import.meta.url)),source()]).then(([data,s])=>{restrictTileRequests(s,data);guardReprojection(s);layer.setSource(s);input.disabled=false;input.checked=true;layer.setVisible(true)}).catch(e=>{label.title=`Layer unavailable: ${e.message}`;console.error(name,e)});input.addEventListener('change',()=>layer.setVisible(input.checked))}
 export const swiss=async()=>{const r=await fetch('https://wmts.geo.admin.ch/EPSG/3857/1.0.0/WMTSCapabilities.xml');if(!r.ok)throw Error('Capabilities unavailable');const opts=optionsFromCapabilities(new WMTSCapabilities().read(await r.text()),{layer:'ch.swisstopo.pixelkarte-farbe',matrixSet:'3857_19'});if(!opts)throw Error('Layer unavailable');return new WMTS({...opts,crossOrigin:'anonymous',attributions:'© swisstopo',wrapX:false})}

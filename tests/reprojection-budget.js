@@ -1,6 +1,7 @@
 import '../src/map/projections/index.js?v=triptychial'
 import XYZ from 'ol/source/XYZ.js'
 import TileState from 'ol/TileState.js'
+import Triangulation from 'ol/reproj/Triangulation.js'
 import {createXYZ} from 'ol/tilegrid.js'
 import {get,transform} from 'ol/proj.js'
 import {createEmpty,extend} from 'ol/extent.js'
@@ -42,6 +43,23 @@ for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
  if(tile.getState()===TileState.EMPTY && !('sourceZ_' in tile))rejected=true
 }
 if(!rejected)errors.push('oversized tile was not rejected when no coarser zoom was available')
+// The guarded call should reuse OpenLayers' triangulation, not create another.
+const savedGetTriangles=Triangulation.prototype.getTriangles,seen=new Set()
+Triangulation.prototype.getTriangles=function(...args){seen.add(this);return savedGetTriangles.apply(this,args)}
+try{
+ const view=get('FROST:TRIPTYCHIAL'),tileGrid=guarded.getTileGridForProjection(view)
+ const coord=tileGrid.getTileCoordForCoordAndZ(transform([8,47],'EPSG:4326',view),8)
+ guarded.getTile(...coord,1,view)
+ if(seen.size!==1)errors.push(`expected one triangulation, saw ${seen.size}`)
+ if(Triangulation.prototype.getTriangles===savedGetTriangles)errors.push('test hook was not restored')
+}finally{Triangulation.prototype.getTriangles=savedGetTriangles}
+// Both temporary overrides must also be restored if tile creation fails.
+const failing=new XYZ({url:'https://example.test/{z}/{x}/{y}.png'})
+failing.getTile=()=>{throw new Error('test failure')}
+guardReprojection(failing)
+const failingGrid=failing.getTileGridForProjection(failing.getProjection()),savedGridMethod=failingGrid.getZForResolution
+try{failing.getTile(4,1,1,1,get('FROST:TRIPTYCHIAL'));errors.push('expected error from tile creation')}catch(error){if(error.message!=='test failure')errors.push(`unexpected error: ${error.message}`)}
+if(Triangulation.prototype.getTriangles!==savedGetTriangles||failingGrid.getZForResolution!==savedGridMethod)errors.push('temporary hooks not restored after error')
 if(!checked)errors.push('no reprojected tiles were checked')
 document.querySelector('#results').textContent=errors.length?errors.join('\n'):`Passed ${checked} reprojection budget checks`
 if(errors.length)throw Error(errors.join('\n'))

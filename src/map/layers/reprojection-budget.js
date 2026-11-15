@@ -13,7 +13,7 @@ const BUDGET_EXCEEDED = Symbol('reprojection budget exceeded')
 
 // Mirror ReprojTile's extent handling. We estimate with every candidate tile,
 // including tiles that will later turn out to be empty, to stay conservative.
-function sourceFootprint(source,sourceProjection,targetProjection,sourceGrid,targetGrid,tileCoord,sourceResolution) {
+function sourceFootprint(source,sourceProjection,targetProjection,sourceGrid,targetGrid,tileCoord,sourceResolution,existingTriangulation) {
  const targetExtent=targetGrid.getTileCoordExtent(tileCoord)
  const maxTargetExtent=targetGrid.getExtent()
  const limitedTarget=maxTargetExtent?getIntersection(targetExtent,maxTargetExtent):targetExtent
@@ -22,7 +22,9 @@ function sourceFootprint(source,sourceProjection,targetProjection,sourceGrid,tar
  if(projectionExtent)maxSourceExtent=maxSourceExtent?getIntersection(maxSourceExtent,projectionExtent):projectionExtent
  const targetResolution=targetGrid.getResolution(tileCoord[0])
  const threshold=source.reprojectionErrorThreshold_ ?? ERROR_THRESHOLD
- const triangulation=new Triangulation(sourceProjection,targetProjection,limitedTarget,maxSourceExtent,sourceResolution*threshold,targetResolution)
+ // Reuse OpenLayers' current triangulation when available. If its internal
+ // call order changes, retain the conservative independent calculation.
+ const triangulation=existingTriangulation || new Triangulation(sourceProjection,targetProjection,limitedTarget,maxSourceExtent,sourceResolution*threshold,targetResolution)
  if(!triangulation.getTriangles().length)return null
  let extent=triangulation.calculateSourceExtent()
  if(maxSourceExtent){
@@ -72,24 +74,37 @@ export function guardReprojection(source) {
   const [targetWidth,targetHeight]=typeof targetSize==='number'?[targetSize,targetSize]:targetSize
   const maxArea=Math.round(targetWidth*effectiveRatio)*Math.round(targetHeight*effectiveRatio)*MAX_SOURCE_AREA_RATIO
   const owner=this
-  // ReprojTile selects the source zoom synchronously, before enumerating tiles.
-  sourceGrid.getZForResolution=function(resolution,...args){
-   let sourceZ=original.call(this,resolution,...args)
-   const extent=sourceFootprint(owner,sourceProjection,targetProjection,sourceGrid,targetGrid,coord,resolution)
-   if(!extent)return sourceZ
-   for(;sourceZ>=sourceGrid.getMinZoom();sourceZ--){
-    const [width,height]=estimateStitchSize(extent,sourceProjection,sourceGrid,sourceZ,effectiveRatio)
-    if(width*height<=maxArea)return sourceZ
-   }
-   throw BUDGET_EXCEEDED
+  let currentTriangulation
+  const getTriangles=Triangulation.prototype.getTriangles
+  // ReprojTile calls getTriangles() immediately before selecting source zoom.
+  // Capture only this projection pair and only during this synchronous call.
+  Triangulation.prototype.getTriangles=function(...args){
+   const result=getTriangles.apply(this,args)
+   if(this.sourceProj_===sourceProjection && this.targetProj_===targetProjection)currentTriangulation=this
+   return result
   }
-  try{return getTile.call(this,z,x,y,pixelRatio,targetProjection)}
-  catch(error){
+  try{
+   // ReprojTile selects the source zoom synchronously, before enumerating tiles.
+   sourceGrid.getZForResolution=function(resolution,...args){
+    let sourceZ=original.call(this,resolution,...args)
+    const extent=sourceFootprint(owner,sourceProjection,targetProjection,sourceGrid,targetGrid,coord,resolution,currentTriangulation)
+    if(!extent)return sourceZ
+    for(;sourceZ>=sourceGrid.getMinZoom();sourceZ--){
+     const [width,height]=estimateStitchSize(extent,sourceProjection,sourceGrid,sourceZ,effectiveRatio)
+     if(width*height<=maxArea)return sourceZ
+    }
+    throw BUDGET_EXCEEDED
+   }
+   return getTile.call(this,z,x,y,pixelRatio,targetProjection)
+  }catch(error){
    if(error!==BUDGET_EXCEEDED)throw error
    // No source zoom fits: an empty tile is preferable to an unsafe allocation.
    const empty=new ImageTile([z,x,y],TileState.EMPTY,'',null,()=>{})
    empty.key=this.getKey()
    return empty
-  }finally{if(hadOwn)sourceGrid.getZForResolution=original;else delete sourceGrid.getZForResolution}
+  }finally{
+   Triangulation.prototype.getTriangles=getTriangles
+   if(hadOwn)sourceGrid.getZForResolution=original;else delete sourceGrid.getZForResolution
+  }
  }
 }
