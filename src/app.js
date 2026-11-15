@@ -4,7 +4,7 @@ import View from 'ol/View.js'
 import TileLayer from 'ol/layer/Tile.js'
 import XYZ from 'ol/source/XYZ.js'
 import {fromLonLat} from 'ol/proj.js'
-const map = new Map({target:'map',layers:[new TileLayer({preload:2,source:new XYZ({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})})],view:new View({center:fromLonLat([10,50]),zoom:4})})
+const map = new Map({target:'map',layers:[new TileLayer({preload:2,cacheSize:16384,source:new XYZ({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})})],view:new View({center:fromLonLat([10,50]),zoom:4})})
 import {readState,syncUrl} from './map/state/url.js'
 import {transform} from 'ol/proj.js'
 function applyState(s){const code=['EPSG:3857','EPSG:3035','EPSG:PEIRCE'].includes(s.projection)?s.projection:'EPSG:3857';const v=new View({projection:code,center:transform(s.center,'EPSG:4326',code),zoom:s.zoom,rotation:s.rotation});map.setView(v);document.querySelector('#projection').value=code}
