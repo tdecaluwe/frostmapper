@@ -1,9 +1,9 @@
 import {transform} from 'ol/proj.js'
 export function readState() {
- const url=new URL(location.href), m=url.searchParams.get('loc')?.match(/^@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(\d+(?:\.\d+)?)z$/)
+ const url=new URL(location.href), m=url.searchParams.get('loc')?.match(/^@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)z$/)
  if(!m) return null
  const lat=+m[1],lon=+m[2],zoom=+m[3],rotation=Number(localStorage.getItem('frostmapper.rotation')||0)
- if(Math.abs(lat)>90||Math.abs(lon)>180||zoom>28||!Number.isFinite(rotation)) return null
+ if(Math.abs(lat)>90||Math.abs(lon)>180||zoom< -10||zoom>28||!Number.isFinite(rotation)) return null
  return {center:[lon,lat],zoom,rotation,projection:localStorage.getItem('frostmapper.projection')||'EPSG:3857'}
 }
 export function syncUrl(map, apply) {

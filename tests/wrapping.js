@@ -1,12 +1,13 @@
 import '../src/map/projections/index.js?v=grieger-wrap'
 import Map from 'ol/Map.js'
 import View from 'ol/View.js'
+import {createMapView} from '../src/map/projections/view.js'
 import TileLayer from 'ol/layer/Tile.js'
 import XYZ from 'ol/source/XYZ.js'
 import {get,transform} from 'ol/proj.js'
-import {clipLayer} from '../src/map/layers/clip.js?v=grieger-wrap'
+import {clipLayer} from '../src/map/layers/clip.js?v=fill-viewport'
 import {guardReprojection} from '../src/map/layers/reprojection-budget.js?v=stitch-scaling'
-import {syncUrl} from '../src/map/state/url.js?v=grieger-wrap'
+import {syncUrl} from '../src/map/state/url.js?v=fill-viewport'
 
 function solid(color){const canvas=document.createElement('canvas');canvas.width=canvas.height=256;const ctx=canvas.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,256,256);return canvas.toDataURL()}
 function source(color){const image=solid(color),result=new XYZ({tileUrlFunction:()=>image,wrapX:true,transition:0});guardReprojection(result);return result}
@@ -56,6 +57,34 @@ for(const world of [-1,0,1]){
  const rgba=combinedContext.getImageData(Math.round(pixel[0]),Math.round(pixel[1]),1,1).data
  if(rgba[1]<180||rgba[0]>60)errors.push(`simultaneous world ${world} is missing: ${rgba}`)
 }
+// Web Mercator also repeats its clipped national layers across worlds.
+broad.setVisible(false)
+for(const layer of layers)layer.setVisible(true)
+const mercatorView=createMapView('EPSG:3857',[8.54,47.37],8)
+map.setView(mercatorView)
+const mercatorProjection=mercatorView.getProjection(),mercatorExtent=mercatorProjection.getExtent(),mercatorWidth=mercatorExtent[2]-mercatorExtent[0]
+for(const country of countries)for(const world of [-1,0,1]){
+ const center=transform(country.center,'EPSG:4326',mercatorProjection)
+ mercatorView.setCenter([center[0]+world*mercatorWidth,center[1]])
+ await render()
+ const composite=document.createElement('canvas');composite.width=768;composite.height=256;const ctx=composite.getContext('2d')
+ for(const canvas of document.querySelectorAll('#map .ol-layer canvas'))ctx.drawImage(canvas,0,0,768,256)
+ const pixel=ctx.getImageData(384,128,1,1).data
+ if(country.expected.some((value,i)=>Math.abs(pixel[i]-value)>20))errors.push(`Web Mercator ${country.id} overlay not visible in world ${world}: ${pixel}`)
+ const saved=new URL(window.location.href).searchParams.get('loc')
+ if(!saved?.startsWith(`@${country.center[1].toFixed(6)},${country.center[0].toFixed(6)},`))errors.push(`incorrect Web Mercator ${country.id} URL in world ${world}: ${saved}`)
+}
+// Repeat a Swiss overlay with rotation in both wrapping projections.
+for(const code of ['EPSG:3857','FROST:TRIPTYCHIAL']){
+ const rotated=createMapView(code,[8.54,47.37],8,Math.PI/4);map.setView(rotated)
+ const extent=rotated.getProjection().getExtent(),worldWidth=extent[2]-extent[0],center=rotated.getCenter()
+ rotated.setCenter([center[0]+worldWidth,center[1]])
+ await render()
+ const composite=document.createElement('canvas');composite.width=768;composite.height=256;const ctx=composite.getContext('2d')
+ for(const canvas of document.querySelectorAll('#map .ol-layer canvas'))ctx.drawImage(canvas,0,0,768,256)
+ const pixel=ctx.getImageData(384,128,1,1).data
+ if(pixel[1]<180||pixel[0]>60)errors.push(`rotated ${code} Swiss overlay not visible: ${pixel}`)
+}
 map.setTarget(undefined)
-document.querySelector('#results').textContent=errors.length?errors.join('\n'):'Passed Grieger wrap, inverse, URL, and national overlay and simultaneous-world checks'
+document.querySelector('#results').textContent=errors.length?errors.join('\n'):'Passed Grieger and Web Mercator wrap, URL, and overlay checks'
 if(errors.length)throw Error(errors.join('\n'))

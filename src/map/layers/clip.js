@@ -30,7 +30,7 @@ export async function clipLayer(map,layer,url){
   const view=map.getView(),viewProjection=view.getProjection(),code=viewProjection.getCode()
   if(code!==projection){
    projection=code
-   worldWidth=code==='FROST:TRIPTYCHIAL' && viewProjection.canWrapX()?viewProjection.getExtent()[2]-viewProjection.getExtent()[0]:0
+   worldWidth=(code==='FROST:TRIPTYCHIAL'||code==='EPSG:3857') && viewProjection.canWrapX()?viewProjection.getExtent()[2]-viewProjection.getExtent()[0]:0
    geometries=format.readFeatures(data,{dataProjection:'EPSG:4326',featureProjection:code}).map(f=>f.getGeometry())
    const extent=createEmpty()
    for(const geometry of geometries)extend(extent,geometry.getExtent())
