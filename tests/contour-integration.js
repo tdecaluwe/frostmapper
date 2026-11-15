@@ -5,8 +5,8 @@ import TileState from 'ol/TileState.js'
 import {get} from 'ol/proj.js'
 import {createMapView} from '../src/map/projections/view.js?v=viewport-model'
 import {guardReprojection,estimateStitchSize,MAX_SOURCE_AREA_RATIO,MAX_NATIVE_SOURCE_AREA_RATIO} from '../src/map/layers/reprojection-budget.js?v=contour-bands'
-import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js'
-import {CompositeTile} from '../src/map/reprojection/composite-tile.js'
+import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=fixed-bands'
+import {CompositeTile} from '../src/map/reprojection/composite-tile.js?v=fixed-bands'
 const errors=[],target=get('EPSG:3035'),map=new Map({target:'map',layers:[],controls:[],view:createMapView('EPSG:3035',[10,52],3)})
 const source=new XYZ({projection:'EPSG:3857',tileUrlFunction:([z])=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="${z%2?'red':'blue'}"/></svg>`)}`,maxZoom:12,crossOrigin:'anonymous'})
 guardReprojection(source)
@@ -16,9 +16,13 @@ const atlas=bands.atlases.get('EPSG:3035'),grid=source.getTileGridForProjection(
 let composite
 if(!atlas)errors.push('atlas did not load')
 if(atlas){
- for(let phase=0;phase<4&&!composite;phase++){
-  bands.setSignature(`EPSG:3035|${phase}`)
-  for(const segment of atlas.query([0,0,1,1],phase)){
+ const key=source.getKey(),signature=bands.signature
+ const center=map.getView().getCenter();map.getView().setCenter([center[0]+1000,center[1]])
+ map.dispatchEvent('moveend')
+ if(bands.signature!==signature||source.getKey()!==key)errors.push('panning changed the contour layout or invalidated the tile cache')
+ {
+  bands.setSignature('EPSG:3035')
+  for(const segment of atlas.query([0,0,1,1])){
    const c=segment.curve,e=atlas.data.extent,point=[e[0]+((c[0]+c[6])/2)*(e[2]-e[0]),e[1]+((c[1]+c[7])/2)*(e[3]-e[1])]
    for(const z of [3,4,5,6]){
     const coord=grid.getTileCoordForCoordAndZ(point,z),tile=source.getTile(...coord,1,target)
@@ -48,6 +52,27 @@ if(composite){
   if(!red||!blue)errors.push(`expected two source zoom colors: red ${red}, blue ${blue}, empty ${empty}`)
  }
  composite.release()
+}
+// A Grieger edge tile can cross more than three bands. It should keep a
+// contour-based mask while capping the number of reprojected source levels.
+{
+ map.setView(createMapView('FROST:TRIPTYCHIAL',[0,-45],5))
+ for(let n=0;n<100&&!bands.atlases.get('FROST:TRIPTYCHIAL');n++)await new Promise(resolve=>setTimeout(resolve,20))
+ const grieger=get('FROST:TRIPTYCHIAL'),atlas=bands.atlases.get('FROST:TRIPTYCHIAL'),targetGrid=source.getTileGridForProjection(grieger),field=bands.field(grieger,source.getProjection())
+ let merged=false
+ if(atlas)for(let z=2;z<=6&&!merged;z++){
+  const range=targetGrid.getTileRangeForExtentAndZ(grieger.getExtent(),z)
+  for(let x=range.minX;x<=range.maxX&&!merged;x++)for(const y of [range.minY,range.maxY]){
+   const coord=[z,x,y],extent=targetGrid.getTileCoordExtent(coord),anchor=field.at([(extent[0]+extent[2])/2,(extent[1]+extent[3])/2])
+   const spans=bands.planner.plan(atlas,extent,256,256,anchor)
+   if(!spans||new Set(spans.map(span=>span.band)).size<=3)continue
+   const tile=source.getTile(...coord,1,grieger)
+   if(tile instanceof CompositeTile&&tile.children.size<=3)merged=true
+   tile.release()
+   if(merged)break
+  }
+ }
+ if(!merged)errors.push('Grieger edge did not retain a mask while merging extra levels')
 }
 map.setTarget(undefined)
 document.querySelector('#results').textContent=errors.length?errors.join('\n'):'Passed contour reprojection integration checks'

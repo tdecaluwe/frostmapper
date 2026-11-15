@@ -1,6 +1,6 @@
 import '../src/map/projections/index.js?v=grieger-wrap'
 import {get} from 'ol/proj.js'
-import {ContourAtlasBuilder} from '../src/map/reprojection/contour-atlas.js'
+import {ContourAtlasBuilder} from '../src/map/reprojection/contour-atlas.js?v=fixed-bands'
 window.generateContourAtlas=code=>new ContourAtlasBuilder(get(code),get('EPSG:3857')).build()
 document.querySelector('#generate').addEventListener('click',()=>{
  const code=document.querySelector('#projection').value,status=document.querySelector('#status')

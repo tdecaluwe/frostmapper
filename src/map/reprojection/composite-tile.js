@@ -29,7 +29,7 @@ export class CompositeTile extends Tile {
   for(const [zoom,child] of this.children){
    if(child.getState()!==TileState.LOADED)continue
    ctx.save();ctx.beginPath()
-   for(const span of this.spans)if(span.zoom===zoom)ctx.rect(span.x,span.y,span.width,1)
+   for(const span of this.spans)if(span.zoom===zoom)ctx.rect(span.x,span.y,span.width,span.height||1)
    ctx.clip();ctx.drawImage(child.getImage(),0,0,this.width,this.height);ctx.restore()
   }
   this.canvas=canvas;this.state=TileState.LOADED

@@ -7,13 +7,13 @@ import {createMapView} from './map/projections/view.js?v=viewport-model'
 import {ProjectionViewport,ProjectionUnavailableError} from './map/projections/viewport.js'
 import {CanonicalZoom} from './map/projections/canonical-zoom.js'
 import {guardReprojection} from './map/layers/reprojection-budget.js?v=contour-bands'
-import {ContourReprojection} from './map/reprojection/contour-reprojection.js'
+import {ContourReprojection} from './map/reprojection/contour-reprojection.js?v=fixed-bands'
 const baseSource=new XYZ({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})
 guardReprojection(baseSource)
 const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({preload:2,cacheSize:16384,source:baseSource})],view:createMapView('EPSG:3857',[10,50],4)})
 const contourReprojection=new ContourReprojection(map)
 contourReprojection.addSource(baseSource)
-if(new URL(location.href).searchParams.get('debugBands')==='1')import('./map/reprojection/debug-overlay.js').then(({ContourDebugOverlay})=>new ContourDebugOverlay(map,contourReprojection))
+if(new URL(location.href).searchParams.get('debugBands')==='1')import('./map/reprojection/debug-overlay.js?v=fixed-bands').then(({ContourDebugOverlay})=>new ContourDebugOverlay(map,contourReprojection))
 import {readState,syncUrl} from './map/state/url.js?v=contour-bands'
 function applyState(s){const code=['EPSG:3857','EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL'].includes(s.projection)?s.projection:'EPSG:3857';map.setView(CanonicalZoom.createView(code,s.center,s.zoom,s.rotation,map.getSize()));document.querySelector('#projection').value=code}
 const initial=readState(); if(initial) applyState(initial)
