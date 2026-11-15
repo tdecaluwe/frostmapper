@@ -11,3 +11,5 @@ const initial=readState(); if(initial) applyState(initial)
 syncUrl(map,applyState)
 import {attachScale} from './map/controls/scale.js'
 attachScale(map)
+import {nationalLayer,swiss} from './map/layers/national.js'
+nationalLayer(map,{name:'Switzerland',border:'ch',source:swiss})
