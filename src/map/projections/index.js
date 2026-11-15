@@ -1,7 +1,7 @@
 import proj4 from 'proj4'
 import {register} from 'ol/proj/proj4.js'
 import {get} from 'ol/proj.js'
-import {registerPeirce,registerAffine,registerPipeline,PEIRCE_CODE,PEIRCE_EXTENT,PEIRCE_WORLD_EXTENT} from './peirce.js'
+import {registerPeirce,registerAffine,registerPipeline,PEIRCE_CODE,PEIRCE_EXTENT,PEIRCE_WORLD_EXTENT} from './peirce.js?v=peirce-horizontal'
 registerPeirce(proj4)
 registerAffine(proj4)
 registerPipeline(proj4)

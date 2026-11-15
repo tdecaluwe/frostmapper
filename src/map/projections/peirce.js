@@ -1,3 +1,4 @@
+import {horizontalForward,horizontalInverse,HORIZONTAL_HALF_HEIGHT} from './peirce-horizontal.js'
 const {sqrt, sign, cos, sin, tan, atan, atan2, hypot, PI} = Math;
 const degrees = 180/PI, radians = PI/180, halfPi = PI/2;
 
@@ -149,21 +150,30 @@ export class NormalizedPeirceCoords extends Coords {
   }
 }
 
-export function registerPeirce(proj4, {k_0 = PEIRCE_METERS_PER_UNIT} = {}) {
+export function registerPeirce(proj4) {
   proj4.Proj.projections.add({
     names: ['peirce', 'peirce_q'],
     init() {
       this.k0 = this.k0 ?? 1
+      if (this.shape && this.shape !== 'horizontal') throw new Error(`Unsupported Peirce shape: ${this.shape}`)
     },
     forward(point) {
+      if (this.shape === 'horizontal') {
+        const [x,y] = horizontalForward(point.x-(this.long0 || 0),point.y)
+        return {x: x*this.a*this.k0+(this.x0 || 0), y: y*this.a*this.k0+(this.y0 || 0)}
+      }
       const {x, y} = NormalizedPeirceCoords.forward(point)
       return {x: x * this.k0, y: y * this.k0}
     },
     inverse({x, y}) {
+      if (this.shape === 'horizontal') {
+        const [lon,lat] = horizontalInverse((x-(this.x0 || 0))/(this.a*this.k0),(y-(this.y0 || 0))/(this.a*this.k0))
+        return {x: Math.atan2(Math.sin(lon+(this.long0 || 0)),Math.cos(lon+(this.long0 || 0))), y:lat}
+      }
       return NormalizedPeirceCoords.inverse({x: x / this.k0, y: y / this.k0})
     },
   })
-  proj4.defs(PEIRCE_CODE, '+proj=peirce_q +k_0=' + k_0 + ' +units=m +no_defs')
+  proj4.defs(PEIRCE_CODE, '+proj=peirce_q +lon_0=25 +shape=horizontal +units=m +no_defs')
   return PEIRCE_CODE
 }
 
@@ -352,7 +362,7 @@ export const GRIEGER_CODE = 'EPSG:GRIEGER'
 export const PEIRCE_WORLD_EXTENT = [-180, -90, 180, 90]
 export const PEIRCE_SQUARE_EXTENT = [-1, -1, 1, 1]
 export const PEIRCE_METERS_PER_UNIT = 10_000_000
-export const PEIRCE_EXTENT = PEIRCE_SQUARE_EXTENT.map((value) => value * PEIRCE_METERS_PER_UNIT)
+export const PEIRCE_EXTENT = [-2, -1, 2, 1].map(value => value * HORIZONTAL_HALF_HEIGHT * 6378137)
 export const GRIEGER_EXTENT = PEIRCE_EXTENT
 
 export function projectLonLatToPeirce(lonLat) {

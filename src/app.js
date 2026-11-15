@@ -1,4 +1,4 @@
-import './map/projections/index.js'
+import './map/projections/index.js?v=peirce-horizontal'
 import Map from 'ol/Map.js'
 import View from 'ol/View.js'
 import {defaults as defaultInteractions} from 'ol/interaction/defaults.js'
