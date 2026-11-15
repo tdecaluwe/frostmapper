@@ -5,9 +5,13 @@ import {ERROR_THRESHOLD} from 'ol/reproj/common.js'
 import {equivalent} from 'ol/proj.js'
 import {createEmpty,extend,getArea,getIntersection,getWidth,wrapAndSliceX} from 'ol/extent.js'
 
-// The stitched source canvas may use at most 8× the output tile area.
-// For a 256×256 tile at pixel ratio 1, this is 524,288 pixels (~2 MiB RGBA).
-export const MAX_SOURCE_AREA_RATIO = 8
+// The stitched source canvas may use at most 9× the output tile area.
+// For a 256×256 tile at pixel ratio 1, this is 589,824 pixels (~2.25 MiB RGBA).
+export const MAX_SOURCE_AREA_RATIO = 9
+// Limit decoded source-image load as well as the stitch buffer. Ordinary 3×3
+// source tiles remain at their preferred zoom; extreme polar footprints can
+// fall back to a coarser source zoom before loading thousands of images.
+const MAX_NATIVE_SOURCE_AREA_RATIO = 32
 const guardedSources = new WeakSet()
 const BUDGET_EXCEEDED = Symbol('reprojection budget exceeded')
 
@@ -54,7 +58,20 @@ export function estimateStitchSize(sourceExtent,sourceProjection,sourceGrid,z,pi
  }
  if(!stitched.every(Number.isFinite))return [Infinity,Infinity]
  const resolution=sourceGrid.getResolution(z)
- return [Math.round((stitched[2]-stitched[0])*pixelRatio/resolution),Math.round((stitched[3]-stitched[1])*pixelRatio/resolution)]
+ // Keep fractional dimensions so Canvas rounding is applied only once.
+ return [(stitched[2]-stitched[0])*pixelRatio/resolution,(stitched[3]-stitched[1])*pixelRatio/resolution]
+}
+
+// Find the largest stitch scale whose rounded dimensions stay within budget.
+function stitchScale(width,height,maxArea) {
+ if(Math.round(width)*Math.round(height)<=maxArea)return 1
+ let low=0,high=1
+ for(let i=0;i<48;i++){
+  const middle=(low+high)/2
+  if(Math.round(width*middle)*Math.round(height*middle)<=maxArea)low=middle
+  else high=middle
+ }
+ return low
 }
 
 export function guardReprojection(source) {
@@ -72,8 +89,10 @@ export function guardReprojection(source) {
   const effectiveRatio=this.getTilePixelRatio(pixelRatio)
   const targetSize=targetGrid.getTileSize(z)
   const [targetWidth,targetHeight]=typeof targetSize==='number'?[targetSize,targetSize]:targetSize
-  const maxArea=Math.round(targetWidth*effectiveRatio)*Math.round(targetHeight*effectiveRatio)*MAX_SOURCE_AREA_RATIO
+  const outputArea=Math.round(targetWidth*effectiveRatio)*Math.round(targetHeight*effectiveRatio)
+  const maxArea=outputArea*MAX_SOURCE_AREA_RATIO
   const owner=this
+  let scale=1
   let currentTriangulation
   const getTriangles=Triangulation.prototype.getTriangles
   // ReprojTile calls getTriangles() immediately before selecting source zoom.
@@ -91,11 +110,24 @@ export function guardReprojection(source) {
     if(!extent)return sourceZ
     for(;sourceZ>=sourceGrid.getMinZoom();sourceZ--){
      const [width,height]=estimateStitchSize(extent,sourceProjection,sourceGrid,sourceZ,effectiveRatio)
-     if(width*height<=maxArea)return sourceZ
+     // Avoid excessive image loading independently of the stitch budget.
+     if(Math.round(width)*Math.round(height)<=outputArea*MAX_NATIVE_SOURCE_AREA_RATIO){
+      scale=stitchScale(width,height,maxArea)
+      return sourceZ
+     }
     }
     throw BUDGET_EXCEEDED
    }
-   return getTile.call(this,z,x,y,pixelRatio,targetProjection)
+   const tile=getTile.call(this,z,x,y,pixelRatio,targetProjection)
+   if(scale<1 && tile.sourceTileGrid_){
+    // ReprojTile uses this grid twice: first for the real source extents, then
+    // for the stitch resolution. Preserve the former and scale only the latter.
+    const stitchGrid=Object.create(sourceGrid)
+    stitchGrid.getTileCoordExtent=sourceGrid.getTileCoordExtent.bind(sourceGrid)
+    stitchGrid.getResolution=level=>sourceGrid.getResolution(level)/scale
+    tile.sourceTileGrid_=stitchGrid
+   }
+   return tile
   }catch(error){
    if(error!==BUDGET_EXCEEDED)throw error
    // No source zoom fits: an empty tile is preferable to an unsafe allocation.
