@@ -1,5 +1,6 @@
 import GeoJSON from 'ol/format/GeoJSON.js'
 import {apply} from 'ol/transform.js'
+import {createCoverageIndex} from './coverage.js'
 export async function clipLayer(layer,url){
  const response=await fetch(url);if(!response.ok)throw new Error(`Border: ${response.status}`)
  const data=await response.json(),format=new GeoJSON();let projection, geometries=[]
@@ -10,14 +11,12 @@ export async function clipLayer(layer,url){
 
 // Filter source tiles before fetching; clipping alone happens after network requests.
 export function restrictTileRequests(source,data){
- const format=new GeoJSON(), sourceProjection=source.getProjection()
- const geometries=format.readFeatures(data,{dataProjection:'EPSG:4326',featureProjection:sourceProjection}).map(feature=>feature.getGeometry())
+ const sourceProjection=source.getProjection()
+ const grid=source.getTileGridForProjection(sourceProjection)
+ const intersectsCountry=createCoverageIndex(data,sourceProjection,grid)
  const original=source.getTileUrlFunction()
  source.setTileUrlFunction((tileCoord,pixelRatio,projection)=>{
-  if(!tileCoord)return undefined
-  const grid=source.getTileGridForProjection(sourceProjection)
-  const extent=grid.getTileCoordExtent(tileCoord)
-  if(!geometries.some(geometry=>geometry.intersectsExtent(extent)))return undefined
+  if(!tileCoord||!intersectsCountry(tileCoord))return undefined
   return original.call(source,tileCoord,pixelRatio,projection)
  })
 }
