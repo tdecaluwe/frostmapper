@@ -3,7 +3,7 @@ import Map from 'ol/Map.js'
 import Polygon from 'ol/geom/Polygon.js'
 import {getArea} from 'ol/sphere.js'
 import {transform} from 'ol/proj.js'
-import {createMapView,createViewPreservingArea} from '../src/map/projections/view.js?v=preserve-area'
+import {createMapView,createViewPreservingArea} from '../src/map/projections/view.js?v=preserve-orientation'
 
 const el=document.querySelector('#map'),map=new Map({target:el,layers:[],controls:[],view:createMapView('EPSG:3857',[8.54,47.37],8)})
 const codes=['EPSG:3857','EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL'],errors=[]
@@ -13,16 +13,94 @@ function localArea(){
  for(let i=1;i<points.length;i++){while(points[i][0]-points[i-1][0]>180)points[i][0]-=360;while(points[i][0]-points[i-1][0]<-180)points[i][0]+=360}
  return getArea(new Polygon([points]),{projection:'EPSG:4326'})
 }
+// Measure the screen bearing of geographic north, independently of the
+// implementation's rotation calculation.
+function screenNorth(){
+ const view=map.getView(),projection=view.getProjection(),center=view.getCenter()
+ const [lon,lat]=transform(center,projection,'EPSG:4326'),points=[]
+ for(const latitude of [lat-.0001,lat+.0001]){
+  const point=transform([lon,latitude],'EPSG:4326',projection)
+  if(projection.canWrapX()){
+   const extent=projection.getExtent(),width=extent[2]-extent[0]
+   point[0]+=Math.round((center[0]-point[0])/width)*width
+  }
+  points.push(map.getPixelFromCoordinate(point))
+ }
+ return Math.atan2(points[1][0]-points[0][0],-(points[1][1]-points[0][1]))
+}
+function angleDifference(a,b){return Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b)))}
+// Compare directions using OpenLayers' screen/coordinate conversions, not the
+// implementation's projection-space rotation formula.
+function circleSamples(){
+ const [width,height]=map.getSize(),radius=Math.min(width,height)/2,projection=map.getView().getProjection(),extent=projection.getExtent(),result=[]
+ for(let i=0;i<32;i++){
+  const angle=2*Math.PI*i/32,px=radius*Math.cos(angle),py=radius*Math.sin(angle)
+  const coordinate=map.getCoordinateFromPixel([width/2+px,height/2+py])
+  if(extent&&(coordinate[1]<extent[1]||coordinate[1]>extent[3]))continue
+  if(extent&&!projection.canWrapX()&&(coordinate[0]<extent[0]||coordinate[0]>extent[2]))continue
+  const lonLat=transform(coordinate,projection,'EPSG:4326')
+  if(lonLat.every(Number.isFinite)&&Math.abs(lonLat[1])<=90)result.push({lonLat,direction:Math.atan2(px,-py)})
+ }
+ return result
+}
+function circleShift(samples){
+ const view=map.getView(),projection=view.getProjection(),center=view.getCenter(),extent=projection.getExtent(),[width,height]=map.getSize()
+ let sin=0,cos=0,count=0
+ for(const sample of samples){
+  const point=transform(sample.lonLat,'EPSG:4326',projection)
+  if(!point.every(Number.isFinite))continue
+  if(extent&&(point[1]<extent[1]||point[1]>extent[3]))continue
+  if(extent&&!projection.canWrapX()&&(point[0]<extent[0]||point[0]>extent[2]))continue
+  if(projection.canWrapX()){const worldWidth=extent[2]-extent[0];point[0]+=Math.round((center[0]-point[0])/worldWidth)*worldWidth}
+  const pixel=map.getPixelFromCoordinate(point),dx=pixel[0]-width/2,dy=pixel[1]-height/2
+  if(Math.hypot(dx,dy)<1e-6)continue
+  const shift=Math.atan2(dx,-dy)-sample.direction;sin+=Math.sin(shift);cos+=Math.cos(shift);count++
+ }
+ return {angle:Math.atan2(sin,cos),count,strength:Math.hypot(sin,cos)/count}
+}
 for(const [w,h] of [[800,600],[390,664]]){
  el.style.width=`${w}px`;el.style.height=`${h}px`;map.updateSize()
  for(const center of [[8.54,47.37],[2.35,48.85],[10.75,59.91]])for(const from of codes)for(const to of codes){
-  const initial=createMapView(from,center,8,.3);map.setView(initial);map.renderSync();const before=localArea()
+  const initial=createMapView(from,center,8,.3);map.setView(initial);map.renderSync();const before=localArea(),beforeNorth=screenNorth(),circle=circleSamples()
   const next=createViewPreservingArea(initial,to,map.getSize());map.setView(next);map.renderSync();const after=localArea()
   const lonLat=transform(next.getCenter(),next.getProjection(),'EPSG:4326'),relative=Math.abs(after/before-1)
   if(!Number.isFinite(relative)||relative>0.02)errors.push(`${from} → ${to} at ${center}: area changed ${relative}`)
   if(Math.abs(lonLat[0]-center[0])>1e-4||Math.abs(lonLat[1]-center[1])>1e-4)errors.push(`${from} → ${to}: center changed ${lonLat}`)
-  if(Math.abs(next.getRotation()-.3)>1e-8)errors.push(`${from} → ${to}: rotation changed`)
+  if(angleDifference(beforeNorth,screenNorth())>.01)errors.push(`${from} → ${to}: low-distortion north changed too much`)
+  const shift=circleShift(circle);if(shift.count>=8&&shift.strength>=.1&&Math.abs(shift.angle)>1e-4)errors.push(`${from} → ${to}: circle mean shifted ${shift.angle}`)
  }
+}
+// Verify zero, small (below OpenLayers' snap threshold), and rotated headings.
+for(const rotation of [0,.03,.3,-.7,Math.PI-.01,-Math.PI+.01])for(const from of codes)for(const to of codes){
+ const initial=createMapView(from,[8.54,47.37],8,rotation,{exactRotation:true});map.setView(initial);map.renderSync();const before=screenNorth(),circle=circleSamples()
+ const next=createViewPreservingArea(initial,to,map.getSize());map.setView(next);map.renderSync()
+ if(angleDifference(before,screenNorth())>.01)errors.push(`${from} → ${to}: low-distortion north changed at rotation ${rotation}`)
+ const shift=circleShift(circle);if(shift.count>=8&&shift.strength>=.1&&Math.abs(shift.angle)>1e-4)errors.push(`${from} → ${to}: circle mean shifted at rotation ${rotation}: ${shift.angle}`)
+}
+// If the viewport size is unavailable, use a local-north fallback.
+{
+ const initial=createMapView('EPSG:3857',[8.54,47.37],8,.03,{exactRotation:true});map.setView(initial);map.renderSync();const before=screenNorth()
+ const next=createViewPreservingArea(initial,'FROST:TRIPTYCHIAL');map.setView(next);map.renderSync()
+ if(angleDifference(before,screenNorth())>1e-4)errors.push('local orientation fallback changed screen north')
+}
+// Compare the circular average on wider, rotated views and all projection pairs.
+for(const [width,height] of [[800,600],[390,664]])for(const zoom of [3,4])for(const rotation of [0,.35])for(const from of codes)for(const to of codes){
+ el.style.width=`${width}px`;el.style.height=`${height}px`;map.updateSize()
+ const initial=createMapView(from,[8.54,47.37],zoom,rotation,{exactRotation:true});map.setView(initial);map.renderSync();const circle=circleSamples()
+ const next=createViewPreservingArea(initial,to,map.getSize());map.setView(next);map.renderSync();const shift=circleShift(circle)
+ if(shift.count>=8&&shift.strength>=.1&&Math.abs(shift.angle)>.001)errors.push(`wide ${from} → ${to} ${width}×${height} z${zoom} rotation ${rotation}: circle mean shifted ${shift.angle}`)
+}
+// Wrapped copies, antimeridian views, and high latitudes should remain stable.
+for(const center of [[179,20],[-179,20],[0,80]])for(const from of codes)for(const to of codes){
+ const initial=createMapView(from,center,7,.3,{exactRotation:true});map.setView(initial)
+ if(initial.getProjection().canWrapX()){
+  const extent=initial.getProjection().getExtent(),width=extent[2]-extent[0],point=initial.getCenter()
+  initial.setCenter([point[0]+2*width,point[1]])
+ }
+ map.renderSync();const circle=circleSamples()
+ const next=createViewPreservingArea(initial,to,map.getSize());map.setView(next);map.renderSync();const shift=circleShift(circle)
+ if(shift.count>=8&&shift.strength>=.1&&Math.abs(shift.angle)>.001)errors.push(`wrapped/cut ${from} → ${to} at ${center}: circle mean shifted ${shift.angle}`)
+ if(!Number.isFinite(next.getRotation()))errors.push(`invalid rotation ${from} → ${to} at ${center}`)
 }
 // Independently approximate the full visible ground area on a wider view.
 function viewportArea(){

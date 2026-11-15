@@ -1,13 +1,16 @@
 import View from 'ol/View.js'
 import {get as getProjection,transform} from 'ol/proj.js'
 import {equivalentViewportResolution} from './ground-area.js'
+import {equivalentRotation} from './orientation.js'
 
 // These projections repeat horizontally but have a finite vertical extent.
 const WRAPPED_PROJECTIONS=new Set(['EPSG:3857','FROST:TRIPTYCHIAL'])
 
-export function createMapView(code,lonLat,zoom,rotation=0){
+export function createMapView(code,lonLat,zoom,rotation=0,{exactRotation=false}={}){
  const projection=getProjection(code)
  const options={projection,center:transform(lonLat,'EPSG:4326',projection),zoom,rotation}
+ // Projection-compensated angles must not snap to the grid's zero angle.
+ if(exactRotation)options.constrainRotation=false
  if(WRAPPED_PROJECTIONS.has(code)){
   const extent=projection.getExtent()
   Object.assign(options,{
@@ -25,10 +28,12 @@ export function createMapView(code,lonLat,zoom,rotation=0){
  return new View(options)
 }
 
-// Keep the local ground area represented by the fixed-size viewport stable.
+// Preserve average screen orientation and approximate viewport ground area.
 export function createViewPreservingArea(sourceView,code,size){
  const lonLat=transform(sourceView.getCenter(),sourceView.getProjection(),'EPSG:4326')
- const view=createMapView(code,lonLat,sourceView.getZoom(),sourceView.getRotation())
+ const view=createMapView(code,lonLat,sourceView.getZoom(),sourceView.getRotation(),{exactRotation:true})
+ const rotation=equivalentRotation(sourceView,view,size)
+ if(rotation!==null)view.setRotation(rotation)
  const resolution=equivalentViewportResolution(sourceView,view,size)
  if(resolution!==null)view.setResolution(resolution)
  return view
