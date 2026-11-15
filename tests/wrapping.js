@@ -6,7 +6,7 @@ import TileLayer from 'ol/layer/Tile.js'
 import XYZ from 'ol/source/XYZ.js'
 import {get,transform} from 'ol/proj.js'
 import {clipLayer} from '../src/map/layers/clip.js?v=fill-viewport'
-import {guardReprojection} from '../src/map/layers/reprojection-budget.js?v=stitch-scaling'
+import {guardReprojection} from '../src/map/layers/reprojection-budget.js?v=contour-bands'
 import {syncUrl} from '../src/map/state/url.js?v=fill-viewport'
 
 function solid(color){const canvas=document.createElement('canvas');canvas.width=canvas.height=256;const ctx=canvas.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,256,256);return canvas.toDataURL()}

@@ -1,4 +1,5 @@
 import {transform} from 'ol/proj.js'
+import {CanonicalZoom} from '../projections/canonical-zoom.js'
 export function readState() {
  const url=new URL(location.href), m=url.searchParams.get('loc')?.match(/^@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)z$/)
  if(!m) return null
@@ -8,6 +9,6 @@ export function readState() {
 }
 export function syncUrl(map, apply) {
  let restoring=false
- const write=(push=false)=>{if(restoring)return; const view=map.getView(), c=transform(view.getCenter(),view.getProjection(),'EPSG:4326'); if(!c.every(Number.isFinite))return; const longitude=((c[0]+180)%360+360)%360-180; const u=new URL(location.href); u.searchParams.set('loc',`@${c[1].toFixed(6)},${longitude.toFixed(6)},${view.getZoom().toFixed(2)}z`); localStorage.setItem('frostmapper.projection',view.getProjection().getCode()); localStorage.setItem('frostmapper.rotation',view.getRotation().toFixed(4)); history[push?'pushState':'replaceState'](null,'',u)}
+ const write=(push=false)=>{if(restoring)return; const view=map.getView(), c=transform(view.getCenter(),view.getProjection(),'EPSG:4326'), zoom=CanonicalZoom.fromView(view,map.getSize()); if(!c.every(Number.isFinite)||!Number.isFinite(zoom))return; const longitude=((c[0]+180)%360+360)%360-180; const u=new URL(location.href); u.searchParams.set('loc',`@${c[1].toFixed(6)},${longitude.toFixed(6)},${zoom.toFixed(2)}z`); localStorage.setItem('frostmapper.projection',view.getProjection().getCode()); localStorage.setItem('frostmapper.rotation',view.getRotation().toFixed(4)); history[push?'pushState':'replaceState'](null,'',u)}
  map.on('moveend',()=>write(true)); window.addEventListener('popstate',()=>{const s=readState();if(s){restoring=true;apply(s);restoring=false}}); write()
 }

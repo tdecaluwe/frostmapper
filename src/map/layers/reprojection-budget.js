@@ -11,7 +11,7 @@ export const MAX_SOURCE_AREA_RATIO = 9
 // Limit decoded source-image load as well as the stitch buffer. Ordinary 3×3
 // source tiles remain at their preferred zoom; extreme polar footprints can
 // fall back to a coarser source zoom before loading thousands of images.
-const MAX_NATIVE_SOURCE_AREA_RATIO = 32
+export const MAX_NATIVE_SOURCE_AREA_RATIO = 32
 const guardedSources = new WeakSet()
 const BUDGET_EXCEEDED = Symbol('reprojection budget exceeded')
 
@@ -78,7 +78,7 @@ export function guardReprojection(source) {
  if(guardedSources.has(source))return
  guardedSources.add(source)
  const getTile=source.getTile
- source.getTile=function(z,x,y,pixelRatio,targetProjection){
+ function guardedTile(z,x,y,pixelRatio,targetProjection,requestedZoom,areaRatio=MAX_SOURCE_AREA_RATIO,nativeRatio=MAX_NATIVE_SOURCE_AREA_RATIO){
   const sourceProjection=this.getProjection()
   if(!sourceProjection||!targetProjection||equivalent(sourceProjection,targetProjection))return getTile.call(this,z,x,y,pixelRatio,targetProjection)
   const sourceGrid=this.getTileGridForProjection(sourceProjection)
@@ -90,7 +90,7 @@ export function guardReprojection(source) {
   const targetSize=targetGrid.getTileSize(z)
   const [targetWidth,targetHeight]=typeof targetSize==='number'?[targetSize,targetSize]:targetSize
   const outputArea=Math.round(targetWidth*effectiveRatio)*Math.round(targetHeight*effectiveRatio)
-  const maxArea=outputArea*MAX_SOURCE_AREA_RATIO
+  const maxArea=outputArea*areaRatio
   const owner=this
   let scale=1
   let currentTriangulation
@@ -105,13 +105,13 @@ export function guardReprojection(source) {
   try{
    // ReprojTile selects the source zoom synchronously, before enumerating tiles.
    sourceGrid.getZForResolution=function(resolution,...args){
-    let sourceZ=original.call(this,resolution,...args)
+    let sourceZ=Number.isInteger(requestedZoom)?Math.max(this.getMinZoom(),Math.min(this.getMaxZoom(),requestedZoom)):original.call(this,resolution,...args)
     const extent=sourceFootprint(owner,sourceProjection,targetProjection,sourceGrid,targetGrid,coord,resolution,currentTriangulation)
     if(!extent)return sourceZ
     for(;sourceZ>=sourceGrid.getMinZoom();sourceZ--){
      const [width,height]=estimateStitchSize(extent,sourceProjection,sourceGrid,sourceZ,effectiveRatio)
      // Avoid excessive image loading independently of the stitch budget.
-     if(Math.round(width)*Math.round(height)<=outputArea*MAX_NATIVE_SOURCE_AREA_RATIO){
+     if(Math.round(width)*Math.round(height)<=outputArea*nativeRatio){
       scale=stitchScale(width,height,maxArea)
       return sourceZ
      }
@@ -139,4 +139,7 @@ export function guardReprojection(source) {
    if(hadOwn)sourceGrid.getZForResolution=original;else delete sourceGrid.getZForResolution
   }
  }
+ source.getTile=function(z,x,y,pixelRatio,targetProjection){return guardedTile.call(this,z,x,y,pixelRatio,targetProjection)}
+ // Reuse the same bounds when a contour band requests a specific source zoom.
+ source.getTileAtSourceZoom=function(z,x,y,pixelRatio,targetProjection,sourceZoom,areaRatio,nativeRatio){return guardedTile.call(this,z,x,y,pixelRatio,targetProjection,sourceZoom,areaRatio,nativeRatio)}
 }
