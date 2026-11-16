@@ -3,13 +3,12 @@ import {wrapAndSliceX} from 'ol/extent.js'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
 import {ContourPlanClient} from './contour-plan-client.js?v=incremental-mask'
 import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r5'
-import {ContourAtlasPreparer} from './contour-atlas-preparer.js?v=atlas-fast-v3'
+import {ContourAtlasPreparer} from './contour-atlas-preparer.js?v=atlas-fast-v4'
 
 function eachSpan(spans,callback){
  if(ArrayBuffer.isView(spans)){for(let i=0;i<spans.length;i+=4)callback({x:spans[i],y:spans[i+1],width:spans[i+2],band:spans[i+3]});return}
  for(const span of spans)callback(span)
 }
-const intersects=(a,b)=>a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1]
 function tileAnchor(extent,width,height,distortionAt){
  const samples=[[.5,.5],[.25,.5],[.75,.5],[.5,.25],[.5,.75],[.25,.25],[.75,.25],[.25,.75],[.75,.75]]
  for(const [fx,fy] of samples){
@@ -64,8 +63,6 @@ export class ContourReprojection {
   else this.setSignature('none')
  }
  sourcePlan(source,code,key,extent,width,height,minimumQuarter,field){
-  const atlas=this.sourceAtlases.get(code)
-  if(atlas?.unrefinedExtents?.some(region=>intersects(extent,region)))return {ready:false,complete:false,spans:null}
   const id=`${code}:source`,versionedKey=`${key}|atlas:${this.atlasRevisions.get(code)||0}`,cached=this.planWorker.peek(id,versionedKey)
   if(cached)return cached
   const anchorAt=(tileExtent,tileWidth,tileHeight)=>tileAnchor(tileExtent,tileWidth,tileHeight,point=>field.atSource(point))

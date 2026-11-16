@@ -15,7 +15,7 @@ export class ContourAtlasPreparer{
  createWorker(){
   if(this.worker)return true
   try{
-   this.worker=new Worker(new URL('./contour-atlas-worker.js?v=atlas-fast-v3',import.meta.url),{type:'module'})
+   this.worker=new Worker(new URL('./contour-atlas-worker.js?v=atlas-fast-v4',import.meta.url),{type:'module'})
    this.worker.onmessage=event=>this.receive(event.data)
    this.worker.onerror=event=>this.failAll(event.message||'Contour atlas worker failed')
   }catch{this.worker=null}

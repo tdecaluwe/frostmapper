@@ -1,5 +1,4 @@
 import {get,PROJECTION_STRINGS,TRIPTYCHIAL_CODE} from '../projections/worker-index.js'
-import {transform} from 'https://esm.sh/ol@10.6.1/proj.js'
 import {ContourAtlasBuilder} from './contour-atlas.js?v=atlas-fast-v2'
 import {MAX_SOURCE_ZOOM} from './contour-atlas-config.js'
 import {buildTriptychialSourceBaseAtlas,refineTriptychialSourceAtlasPasses,refineTriptychialTargetAtlas} from '../../../tools/refine-source-atlas.js?v=atlas-fast-v3'
@@ -28,19 +27,7 @@ async function build(message){
    atlas.highestSourceZoom=MAX_SOURCE_ZOOM
    return atlas
   }
-  const pendingGeographic={
-   'global-base':[[-96,-5,-84,5]],
-   'broad-region':[[-92,-2,-88,2]],
-   'galapagos-region':[[-90.5,-.5,-89.5,.5]],
-   'singularity-region':[]
-  }
-  const publish=(type,stage,atlas)=>{
-   atlas.unrefinedExtents=(pendingGeographic[stage]||[]).map(([west,south,east,north])=>{
-    const [x0,y0]=transform([west,south],'EPSG:4326','EPSG:3857'),[x1,y1]=transform([east,north],'EPSG:4326','EPSG:3857')
-    return [x0,y0,x1,y1]
-   })
-   self.postMessage({type,stage,id:message.id,data:metadata(atlas)})
-  }
+  const publish=(type,stage,atlas)=>self.postMessage({type,stage,id:message.id,data:metadata(atlas)})
   if(triptychialSource){
    publish('update','global-base',data)
    await yieldWorker()
