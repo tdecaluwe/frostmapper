@@ -4,13 +4,18 @@ export function fitContour(points,tolerance){
  if(!Number.isFinite(tolerance)||tolerance<=0||points.length<2||points.some(p=>p.length!==2||!p.every(Number.isFinite)))throw Error('Invalid contour')
  const result=[],distance=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1])
  const norm=v=>{const length=Math.hypot(...v);return length?[v[0]/length,v[1]/length]:[0,0]}
+ const closed=points.length>2&&distance(points[0],points.at(-1))===0
+ function tangent(index){
+  const previous=index===0?(closed?points[points.length-2]:points[0]):points[index-1]
+  const next=index===points.length-1?(closed?points[1]:points[index]):points[index+1]
+  return norm([next[0]-previous[0],next[1]-previous[1]])
+ }
  function fit(first,last,depth){
   const p0=points[first],p3=points[last],length=distance(p0,p3),count=last-first
-  if(count===1){result.push([p0,[p0[0]+(p3[0]-p0[0])/3,p0[1]+(p3[1]-p0[1])/3],[p0[0]+2*(p3[0]-p0[0])/3,p0[1]+2*(p3[1]-p0[1])/3],p3]);return}
+  const t0=tangent(first),end=tangent(last),t1=[-end[0],-end[1]]
+  if(count===1){result.push([p0,[p0[0]+t0[0]*length/3,p0[1]+t0[1]*length/3],[p3[0]+t1[0]*length/3,p3[1]+t1[1]*length/3],p3]);return}
   // Closed sections and repeated endpoints must be split before fitting.
   if(length===0){const mid=first+Math.floor(count/2);fit(first,mid,depth+1);fit(mid,last,depth+1);return}
-  const t0=norm([points[first+1][0]-p0[0],points[first+1][1]-p0[1]])
-  const t1=norm([points[last-1][0]-p3[0],points[last-1][1]-p3[1]])
   const cumulative=[0];for(let i=first+1;i<=last;i++)cumulative.push(cumulative.at(-1)+distance(points[i-1],points[i]))
   const total=cumulative.at(-1);let c00=0,c01=0,c11=0,x0=0,x1=0
   for(let i=1;i<count;i++){

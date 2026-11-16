@@ -1,19 +1,29 @@
 import '../src/map/projections/index.js?v=grieger-wrap'
 import {get} from 'ol/proj.js'
-import {projectionDistortion,DistortionField} from '../src/map/reprojection/distortion.js'
-import {ContourAtlas} from '../src/map/reprojection/contour-atlas.js'
-import {BandMaskPlanner} from '../src/map/reprojection/band-mask.js'
-const src=get('EPSG:3857'),result={}
+import XYZ from 'ol/source/XYZ.js'
+import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r3'
+
+const source=new XYZ({projection:'EPSG:3857'}),sourceProjection=get('EPSG:3857'),result={},errors=[]
+let activeProjection=sourceProjection
+const manager=new ContourReprojection({on(){},getView(){return {getProjection:()=>activeProjection}},getSize(){return [0,0]}})
 for(const [code,file] of [['EPSG:3035','epsg-3035'],['EPSG:PEIRCE','epsg-peirce'],['FROST:TRIPTYCHIAL','frost-triptychial']]){
- const p=get(code),[x0,y0,x1,y1]=p.getExtent(),atlas=new ContourAtlas(await(await fetch(`../data/contours/${file}.json`)).json()),planner=new BandMaskPlanner(),width=32,height=32
- let checked=0,bad=0,fall=0,invalid=0,fast=0
- for(let iy=0;iy<8;iy++)for(let ix=0;ix<8;ix++){
-  const left=x0+(x1-x0)*ix/8,right=x0+(x1-x0)*(ix+1)/8,bottom=y0+(y1-y0)*iy/8,top=y0+(y1-y0)*(iy+1)/8,extent=[left,bottom,right,top],anchor=projectionDistortion(p,src,[(left+right)/2,(bottom+top)/2])
-  if(anchor===null){invalid++;continue}const spans=planner.plan(atlas,extent,width,height,anchor),safe=atlas.canSkipValidation([ix/8,iy/8,(ix+1)/8,(iy+1)/8]);if(safe)fast++;if(!spans||(!safe&&!planner.validate(spans,extent,width,height,new DistortionField(p,src),{samples:9}))){fall++;continue}
-  for(let y=1;y<32;y+=4)for(let x=1;x<32;x+=4){const v=projectionDistortion(p,src,[left+(x+.5)/width*(right-left),top-(y+.5)/height*(top-bottom)]);if(v===null)continue;const expected=Math.floor(v),span=spans.find(s=>s.y<=y&&s.y+(s.height||1)>y&&s.x<=x&&s.x+s.width>x);if(!span)throw Error('missing span');const delta=Math.abs(v-Math.round(v));if(delta>.13){checked++;if(span.band!==expected)bad++}}
+ activeProjection=get(code)
+ const data=await(await fetch(`../data/contours/${file}.json`)).json(),targetGrid=source.getTileGridForProjection(activeProjection),field=manager.field(activeProjection,sourceProjection),z=3,range=targetGrid.getTileRangeForExtentAndZ(activeProjection.getExtent(),z),pending=[]
+ manager.planWorker.register(`${code}:target`,data)
+ for(let y=range.minY;y<=range.maxY;y++)for(let x=range.minX;x<=range.maxX;x++){
+  const coord=[z,x,y],extent=targetGrid.getTileCoordExtent(coord),size=targetGrid.getTileSize(z),width=typeof size==='number'?size:size[0],height=typeof size==='number'?size:size[1]
+  manager.targetPlan(source,code,z,coord,extent,width,height,field)
+  pending.push({coord,extent,width,height})
  }
- result[code]={checked,bad,fall,invalid,fast}
+ await manager.planWorker.whenIdle()
+ let unavailable=0
+ for(const {coord,width,height} of pending){
+  const reference=Math.round(Math.log2(source.getTileGridForProjection(sourceProjection).getResolution(0)/targetGrid.getResolution(z))),minimumQuarter=4*(reference-source.getTileGridForProjection(sourceProjection).getMaxZoom()),key=`${z}/${coord[1]}/${coord[2]}/${width}/${height}/q${minimumQuarter}`,plan=manager.planWorker.peek(`${code}:target`,key)
+  if(!plan?.ready||!plan.spans)unavailable++
+ }
+ result[code]={tiles:pending.length,unavailable}
 }
-const failures=Object.entries(result).filter(([,stats])=>stats.bad>0||stats.checked<250)
-document.querySelector('#results').textContent=(failures.length?'Failed':'Passed')+' sampled band mask checks\n'+JSON.stringify(result,null,2)
-if(failures.length)throw Error('Band masks disagree with sampled distortion')
+if(Object.values(result).some(stats=>stats.tiles===0||stats.unavailable))errors.push('worker contour plans were unavailable')
+manager.planWorker.worker?.terminate()
+document.querySelector('#results').textContent=(errors.length?'Failed':'Passed')+' worker contour availability checks\n'+JSON.stringify(result,null,2)
+if(errors.length)throw Error(errors.join('\n'))

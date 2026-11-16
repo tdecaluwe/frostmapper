@@ -1,79 +1,43 @@
 import '../src/map/projections/index.js?v=grieger-wrap'
-import Map from 'ol/Map.js'
 import XYZ from 'ol/source/XYZ.js'
 import TileState from 'ol/TileState.js'
 import {get} from 'ol/proj.js'
-import {createMapView} from '../src/map/projections/view.js?v=viewport-model'
-import {guardReprojection,estimateStitchSize,MAX_SOURCE_AREA_RATIO,MAX_NATIVE_SOURCE_AREA_RATIO} from '../src/map/layers/reprojection-budget.js?v=contour-bands'
-import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=fixed-bands'
-import {CompositeTile} from '../src/map/reprojection/composite-tile.js?v=fixed-bands'
-const errors=[],target=get('EPSG:3035'),map=new Map({target:'map',layers:[],controls:[],view:createMapView('EPSG:3035',[10,52],3)})
-const source=new XYZ({projection:'EPSG:3857',tileUrlFunction:([z])=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="${z%2?'red':'blue'}"/></svg>`)}`,maxZoom:12,crossOrigin:'anonymous'})
+import {guardReprojection} from '../src/map/layers/reprojection-budget.js?v=contour-bands'
+import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r3'
+import {AssembledZoomTile} from '../src/map/reprojection/source-assembler.js?v=worker-plans-r3'
+
+const errors=[],projection=get('FROST:TRIPTYCHIAL'),sourceProjection=get('EPSG:3857')
+let activeProjection=projection
+const map={on(){},getView(){return {getProjection:()=>activeProjection,getResolution:()=>1,calculateExtent:()=>projection.getExtent()}},getSize(){return [0,0]}}
+const source=new XYZ({projection:'EPSG:3857',tileUrlFunction:([z])=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="hsl(${z*24} 80% 50%)"/></svg>`)}`,maxZoom:14,crossOrigin:'anonymous'})
 guardReprojection(source)
-const bands=new ContourReprojection(map);bands.addSource(source)
-for(let n=0;n<100&&!bands.atlases.get('EPSG:3035');n++)await new Promise(resolve=>setTimeout(resolve,20))
-const atlas=bands.atlases.get('EPSG:3035'),grid=source.getTileGridForProjection(target)
-let composite
-if(!atlas)errors.push('atlas did not load')
-if(atlas){
- const key=source.getKey(),signature=bands.signature
- const center=map.getView().getCenter();map.getView().setCenter([center[0]+1000,center[1]])
- map.dispatchEvent('moveend')
- if(bands.signature!==signature||source.getKey()!==key)errors.push('panning changed the contour layout or invalidated the tile cache')
- {
-  bands.setSignature('EPSG:3035')
-  for(const segment of atlas.query([0,0,1,1])){
-   const c=segment.curve,e=atlas.data.extent,point=[e[0]+((c[0]+c[6])/2)*(e[2]-e[0]),e[1]+((c[1]+c[7])/2)*(e[3]-e[1])]
-   for(const z of [3,4,5,6]){
-    const coord=grid.getTileCoordForCoordAndZ(point,z),tile=source.getTile(...coord,1,target)
-    if(tile instanceof CompositeTile){composite=tile;break}
-    tile.release()
-   }
-   if(composite)break
-  }
- }
- if(!composite)errors.push('no crossing tile was composed')
-}
-if(composite){
- const count=composite.children.size,sourceGrid=source.getTileGridForProjection(source.getProjection()),outputArea=composite.width*composite.height
- for(const child of composite.children.values())if(child.triangulation_&&child.sourceTileGrid_){
-  const extent=child.triangulation_.calculateSourceExtent(),[width,height]=estimateStitchSize(extent,source.getProjection(),sourceGrid,child.sourceZ_,1)
-  const scale=sourceGrid.getResolution(child.sourceZ_)/child.sourceTileGrid_.getResolution(child.sourceZ_)
-  if(Math.round(width)*Math.round(height)>outputArea*MAX_NATIVE_SOURCE_AREA_RATIO/count)errors.push('composite exceeded native source budget')
-  if(Math.round(width*scale)*Math.round(height*scale)>outputArea*(MAX_SOURCE_AREA_RATIO-count-1))errors.push('composite exceeded stitch budget')
- }
- composite.load()
- for(let n=0;n<200&&[TileState.IDLE,TileState.LOADING].includes(composite.getState());n++)await new Promise(resolve=>setTimeout(resolve,20))
- if(composite.getState()!==TileState.LOADED)errors.push(`crossing tile state ${composite.getState()}`)
- else{
-  const canvas=composite.getImage(),pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data
-  let red=0,blue=0,empty=0
-  for(let i=0;i<pixels.length;i+=4){if(pixels[i+3]===0)empty++;else if(pixels[i]>pixels[i+2])red++;else if(pixels[i+2]>pixels[i])blue++}
-  if(!red||!blue)errors.push(`expected two source zoom colors: red ${red}, blue ${blue}, empty ${empty}`)
- }
- composite.release()
-}
-// A Grieger edge tile can cross more than three bands. It should keep a
-// contour-based mask while capping the number of reprojected source levels.
-{
- map.setView(createMapView('FROST:TRIPTYCHIAL',[0,-45],5))
- for(let n=0;n<100&&!bands.atlases.get('FROST:TRIPTYCHIAL');n++)await new Promise(resolve=>setTimeout(resolve,20))
- const grieger=get('FROST:TRIPTYCHIAL'),atlas=bands.atlases.get('FROST:TRIPTYCHIAL'),targetGrid=source.getTileGridForProjection(grieger),field=bands.field(grieger,source.getProjection())
- let merged=false
- if(atlas)for(let z=2;z<=6&&!merged;z++){
-  const range=targetGrid.getTileRangeForExtentAndZ(grieger.getExtent(),z)
-  for(let x=range.minX;x<=range.maxX&&!merged;x++)for(const y of [range.minY,range.maxY]){
-   const coord=[z,x,y],extent=targetGrid.getTileCoordExtent(coord),anchor=field.at([(extent[0]+extent[2])/2,(extent[1]+extent[3])/2])
-   const spans=bands.planner.plan(atlas,extent,256,256,anchor)
-   if(!spans||new Set(spans.map(span=>span.band)).size<=3)continue
-   const tile=source.getTile(...coord,1,grieger)
-   if(tile instanceof CompositeTile&&tile.children.size<=3)merged=true
-   tile.release()
-   if(merged)break
-  }
- }
- if(!merged)errors.push('Grieger edge did not retain a mask while merging extra levels')
-}
-map.setTarget(undefined)
-document.querySelector('#results').textContent=errors.length?errors.join('\n'):'Passed contour reprojection integration checks'
+const manager=new ContourReprojection(map);manager.addSource(source)
+const targetData=await(await fetch('../data/contours/frost-triptychial.json')).json(),sourceData=await(await fetch('../data/contours/source-frost-triptychial.json')).json()
+manager.atlases.set(projection.getCode(),new (await import('../src/map/reprojection/contour-atlas.js')).ContourAtlas(targetData))
+manager.sourceAtlases.set(projection.getCode(),new (await import('../src/map/reprojection/contour-atlas.js')).ContourAtlas(sourceData))
+manager.planWorker.register(`${projection.getCode()}:target`,targetData);manager.planWorker.register(`${projection.getCode()}:source`,sourceData)
+const grid=source.getTileGridForProjection(projection),sourceGrid=source.getTileGridForProjection(sourceProjection),coord=[5,7,0],extent=grid.getTileCoordExtent(coord),size=grid.getTileSize(coord[0]),width=typeof size==='number'?size:size[0],height=typeof size==='number'?size:size[1],field=manager.field(projection,sourceProjection)
+const incrementalWidth=512,incrementalHeight=512,incrementalKey=`${coord[0]}/${coord[1]}/${coord[2]}/${incrementalWidth}/${incrementalHeight}/q${4*(Math.round(Math.log2(sourceGrid.getResolution(0)/grid.getResolution(coord[0])))-sourceGrid.getMaxZoom())}`
+let sawPartial=false
+const receive=manager.planWorker.receive.bind(manager.planWorker)
+manager.planWorker.receive=message=>{const result=receive(message),state=manager.planWorker.peek(`${projection.getCode()}:target`,incrementalKey);if(state?.ready&&!state.complete&&state.spans?.length)sawPartial=true;return result}
+manager.targetPlan(source,projection.getCode(),coord[0],coord,extent,incrementalWidth,incrementalHeight,field)
+await manager.planWorker.whenIdle()
+if(!sawPartial)errors.push('worker did not publish a usable partial mask')
+if(!manager.planWorker.peek(`${projection.getCode()}:target`,incrementalKey)?.complete)errors.push('partial mask was not finalized')
+manager.targetPlan(source,projection.getCode(),coord[0],coord,extent,width,height,field)
+await manager.planWorker.whenIdle()
+const reference=Math.round(Math.log2(sourceGrid.getResolution(0)/grid.getResolution(coord[0]))),minimumQuarter=4*(reference-sourceGrid.getMaxZoom()),targetKey=`${coord[0]}/${coord[1]}/${coord[2]}/${width}/${height}/q${minimumQuarter}`,targetPlan=manager.planWorker.peek(`${projection.getCode()}:target`,targetKey)
+if(!targetPlan?.ready||!targetPlan.spans)errors.push('target contour plan did not complete')
+let reprojection=source.getTile(...coord,1,projection)
+await manager.planWorker.whenIdle()
+reprojection.release()
+reprojection=source.getTile(...coord,1,projection)
+const assembled=reprojection.sourceTiles_?.filter(({tile})=>tile instanceof AssembledZoomTile)||[]
+if(!assembled.length)errors.push('ReprojTile did not receive assembled source tiles')
+if([...manager.planWorker.cache.values()].some(spans=>spans===null))errors.push('the worker cached a failed plan')
+if(reprojection.getState()===TileState.ERROR)errors.push('the planned reprojection failed')
+reprojection.release()
+manager.planWorker.worker?.terminate();map.setTarget?.(undefined)
+document.querySelector('#results').textContent=errors.length?errors.join('\n'):'Passed worker contour and source assembler integration checks'
 if(errors.length)throw Error(errors.join('\n'))

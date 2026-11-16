@@ -34,6 +34,10 @@ function queueLoad(tile){
  tile.load=function(){sourceLoads.add(tile,start)}
  return tile
 }
+function eachBandSpan(spans,callback){
+ if(ArrayBuffer.isView(spans)){for(let i=0;i<spans.length;i+=4)callback(spans[i],spans[i+1],spans[i+2],spans[i+3]);return}
+ for(const span of spans)callback(span.x,span.y,span.width,span.band)
+}
 
 // A small per-source LRU. Eviction only drops our reference: a tile may still
 // be in use by a ReprojTile or another assembled source tile.
@@ -91,7 +95,7 @@ export class AssembledZoomTile extends Tile {
    const sx=(a-parent[0])/pw*image.width,sy=(parent[3]-d)/ph*image.height,sw=(c-a)/pw*image.width,sh=(d-b)/ph*image.height
    const dx=(a-left)/(right-left)*this.width,dy=(top-d)/(top-bottom)*this.height,dw=(c-a)/(right-left)*this.width,dh=(d-b)/(top-bottom)*this.height
    ctx.save()
-   if(masked){ctx.beginPath();for(const span of this.spans)if(span.zoom===zoom)ctx.rect(span.x,span.y,span.width,span.height||1);ctx.clip()}
+   if(masked){ctx.beginPath();if(ArrayBuffer.isView(this.spans)){for(let i=0;i<this.spans.length;i+=4)if(this.spans[i+3]===zoom)ctx.rect(this.spans[i],this.spans[i+1],this.spans[i+2],1)}else for(const span of this.spans)if(span.zoom===zoom)ctx.rect(span.x,span.y,span.width,span.height||1);ctx.clip()}
    ctx.drawImage(image,sx,sy,sw,sh,dx,dy,dw,dh);ctx.restore()
   }
   const ordered=loaded.sort((a,b)=>a.zoom-b.zoom)
@@ -111,30 +115,26 @@ export {AssembledZoomTile as AssembledSourceTile}
 // otherwise unchanged ReprojTile. Both caches are local to one tile source.
 export class SourceTileAssembler {
  constructor(source,{maxParents=128,maxAssembled=64}={}){this.source=source;this.parents=new TilePool(maxParents);this.assembled=new TilePool(maxAssembled)}
- getTile(z,x,y,pixelRatio,projection,{atlas,field,planner,reference,minimumZoom=z,maximumZoom=minimumZoom+2,original,cacheKey}){
+ getTile(z,x,y,pixelRatio,projection,{spans,reference,minimumZoom=z,maximumZoom=minimumZoom+2,original,cacheKey}){
   const source=this.source,grid=source.getTileGridForProjection(projection),coord=[z,x,y]
   if(source.getGutter()!==0)return original.call(source,z,x,y,pixelRatio,projection)
   const normalized=source.getTileCoordForTileUrlFunction(coord,projection)
   if(!normalized)return original.call(source,z,x,y,pixelRatio,projection)
   const extent=grid.getTileCoordExtent(normalized),tileSize=grid.getTileSize(z),size=typeof tileSize==='number'?[tileSize,tileSize]:tileSize
-  const ratio=source.getTilePixelRatio(pixelRatio),width=Math.round(size[0]*ratio),height=Math.round(size[1]*ratio),domain=atlas.data.extent
+  const ratio=source.getTilePixelRatio(pixelRatio),width=Math.round(size[0]*ratio),height=Math.round(size[1]*ratio)
   if(width<=0||height<=0||width*height>262144)return original.call(source,z,x,y,pixelRatio,projection)
+  if(!spans)return original.call(source,z,x,y,pixelRatio,projection)
   const key=`${cacheKey}|${reference}|${minimumZoom}|${maximumZoom}|${z}/${normalized[1]}/${normalized[2]}|${width}|${height}`
   return this.assembled.get(key,()=>{
-   const fieldInSource={at:point=>field.atSource(point)},anchor=fieldInSource.at([(extent[0]+extent[2])/2,(extent[1]+extent[3])/2])
-   let spans=planner.plan(atlas,extent,width,height,anchor)
-   const norm=[(extent[0]-domain[0])/(domain[2]-domain[0]),(extent[1]-domain[1])/(domain[3]-domain[1]),(extent[2]-domain[0])/(domain[2]-domain[0]),(extent[3]-domain[1])/(domain[3]-domain[1])]
-   if(spans&&!atlas.canSkipValidation(norm)&&!planner.validate(spans,extent,width,height,fieldInSource))spans=null
-   if(!spans)spans=planner.sampledPlan(extent,width,height,fieldInSource)
-   if(!spans)return this.parent(z,normalized[1],normalized[2],pixelRatio,projection,original,cacheKey)
-   const min=grid.getMinZoom(),painted=spans.map(span=>({...span,zoom:Math.max(min,minimumZoom,Math.min(grid.getMaxZoom(),maximumZoom,reference-span.band))}))
-   let levels=[...new Set(painted.map(span=>span.zoom))].sort((a,b)=>a-b)
+   const min=grid.getMinZoom(),spanCount=ArrayBuffer.isView(spans)?spans.length/4:spans.length,painted=new Int32Array(spanCount*4),counts=new Map()
+   let i=0
+   eachBandSpan(spans,(x,y,w,band)=>{const zoom=Math.max(min,minimumZoom,Math.min(grid.getMaxZoom(),maximumZoom,reference-band));painted[i]=x;painted[i+1]=y;painted[i+2]=w;painted[i+3]=zoom;counts.set(zoom,(counts.get(zoom)||0)+w);i+=4})
+   let levels=[...counts.keys()].sort((a,b)=>a-b)
    if(levels.length>3){
-    const counts=new Map();for(const span of painted)counts.set(span.zoom,(counts.get(span.zoom)||0)+span.width*(span.height||1))
     let best=levels[0],weight=-1
     for(const low of levels){let sum=0;for(let candidate=low;candidate<low+3;candidate++)sum+=counts.get(candidate)||0;if(sum>weight){weight=sum;best=low}}
-    for(const span of painted)span.zoom=Math.max(best,Math.min(best+2,span.zoom))
-    levels=[...new Set(painted.map(span=>span.zoom))]
+    counts.clear();for(let i=0;i<painted.length;i+=4){const zoom=painted[i+3]=Math.max(best,Math.min(best+2,painted[i+3]));counts.set(zoom,(counts.get(zoom)||0)+painted[i+2])}
+    levels=[...counts.keys()].sort((a,b)=>a-b)
    }
    const parents=new Map(),fallbackZoom=Math.min(z,minimumZoom)
    for(const zoom of [...new Set([fallbackZoom,...levels])]){

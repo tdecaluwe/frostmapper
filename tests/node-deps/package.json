@@ -1,0 +1,1 @@
+{"private":true,"description":"Optional headless reprojection test dependencies; not used by the app.","dependencies":{"@napi-rs/canvas":"1.1.1","ol":"10.6.1","proj4":"2.19.10"}}

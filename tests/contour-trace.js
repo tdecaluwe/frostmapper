@@ -33,6 +33,11 @@ const check=(condition,message)=>{if(!condition)errors.push(message)}
  const curves=fitContour(points,.02)
  check(curves.length>1&&curves.length<points.length/2,'a curved contour should use multiple compact segments')
  check(curves.every((curve,i)=>!i||curve[0]===curves[i-1][3]),'curve segments must share endpoints exactly')
+ check(curves.slice(1).every((curve,i)=>{
+  const previous=curves[i],incoming=[previous[3][0]-previous[2][0],previous[3][1]-previous[2][1]],outgoing=[curve[1][0]-curve[0][0],curve[1][1]-curve[0][1]]
+  const cross=incoming[0]*outgoing[1]-incoming[1]*outgoing[0],scale=Math.hypot(...incoming)*Math.hypot(...outgoing)
+  return Math.abs(cross)<=scale*1e-10&&incoming[0]*outgoing[0]+incoming[1]*outgoing[1]>0
+ }),'fitted curve joins must preserve a shared tangent')
 }
 {
  const points=[[0,0],[1,0],[1,1],[0,1],[0,0]]

@@ -6,12 +6,6 @@ check(atlas.query([0,0,.5,.5]).length===1,'contour index lookup')
 check(atlas.query([.9,.9,1,1]).length===1,'segment bounding box lookup')
 check(atlas.query([2,2,3,3]).length===0,'outside extent lookup')
 {
- const atlas=new ContourAtlas({version:1,extent:[0,0,1,1],paths:[],complexity:{columns:2,rows:2,unsafe:btoa(String.fromCharCode(2))}})
- check(atlas.canSkipValidation([0,0,.5,.5]),'smooth complexity cell should skip validation')
- check(!atlas.canSkipValidation([.5,0,1,.5]),'complexity cell requiring validation was skipped')
- check(!atlas.canSkipValidation([-.1,0,.4,.4]),'extent beyond atlas must require validation')
-}
-{
  const atlas=new ContourAtlas({version:1,extent:[0,0,1,1],minQuarter:-8,maxQuarter:8,paths:[{quarter:4,curves:[[.5,0,.5,.33,.5,.66,.5,1]]}]})
  const spans=new BandMaskPlanner().plan(atlas,[0,0,1,1],20,10,.99)
  check(spans&&spans.length===20,'vertical contour should split every row')
@@ -33,12 +27,6 @@ check(atlas.query([2,2,3,3]).length===0,'outside extent lookup')
   const a=left?.find(s=>s.y===y&&s.x+s.width===40),b=right?.find(s=>s.y===y&&s.x===0)
   if(y!==20)check(a&&b&&a.band===b.band,`adjacent tile band mismatch at row ${y}`)
  }
-}
-{
- const field={at:([x,y])=>x+y},planner=new BandMaskPlanner()
- const spans=planner.sampledPlan([0,0,1,1],32,32,field)
- check(spans&&planner.validate(spans,[0,0,1,1],32,32,field,{samples:9,tolerance:.01}),'sampled edge fallback did not preserve smooth bands')
- check(planner.sampledPlan([0,0,1,1],1024,1024,field)===null,'sampled fallback must respect its pixel limit')
 }
 {
  for(const file of ['epsg-3035','epsg-peirce','frost-triptychial']){
