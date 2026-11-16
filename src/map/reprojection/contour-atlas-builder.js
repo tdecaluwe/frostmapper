@@ -1,5 +1,5 @@
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
-import {buildAdaptiveContourPaths,createAdaptiveContourWorkspace} from './adaptive-contours.js?v=atlas-fast-v9'
+import {buildAdaptiveContourPaths,createAdaptiveContourWorkspace} from './adaptive-contours.js?v=atlas-fast-v10'
 
 // A projection-pair atlas owns its initial global approximation and the state
 // needed for progressively finer global subdivision passes.

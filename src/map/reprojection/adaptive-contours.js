@@ -20,10 +20,12 @@ export function buildAdaptiveContourPaths({sample,extent,atlasExtent,levels,maxD
  const scaleX=workspace.nx/nx,scaleY=workspace.ny/ny,{blockSize,blocks}=workspace
  if(!Number.isInteger(scaleX)||!Number.isInteger(scaleY))throw Error('Adaptive contour workspace depth mismatch')
  if(!reuseSamples)blocks.clear()
- const sortedLevels=levels.slice().sort((a,b)=>a.value-b.value),integerLevels=sortedLevels.filter(({value})=>Number.isInteger(value)).map(({value})=>value),segments=new Map(levels.map(({value})=>[value,[]])),leaves=[]
+ const makeSegmentStore=()=>({ids:new Map(),points:[],adjacency:[],pairs:[]})
+ const sortedLevels=levels.slice().sort((a,b)=>a.value-b.value),integerLevels=sortedLevels.filter(({value})=>Number.isInteger(value)).map(({value})=>value),segments=new Map(levels.map(({value})=>[value,makeSegmentStore()])),leaves=[]
  const pointKey=(x,y)=>`${x},${y}`
+ const blocksWide=Math.ceil((workspace.nx+1)/blockSize)
  const slot=(x,y,create=false)=>{
-  const ix=x*scaleX,iy=y*scaleY,bx=Math.floor(ix/blockSize),by=Math.floor(iy/blockSize),key=`${bx},${by}`
+  const ix=x*scaleX,iy=y*scaleY,bx=Math.floor(ix/blockSize),by=Math.floor(iy/blockSize),key=by*blocksWide+bx
   let block=blocks.get(key)
   if(!block&&create){block=new Float32Array(blockSize*blockSize);block.fill(Infinity);blocks.set(key,block)}
   return block?{block,index:(iy%blockSize)*blockSize+(ix%blockSize)}:null
@@ -49,7 +51,17 @@ export function buildAdaptiveContourPaths({sample,extent,atlasExtent,levels,maxD
   let end=lo;while(end<sortedLevels.length&&sortedLevels[end].value<=max)end++
   return [lo,end]
  }
- const addSegment=(level,a,b)=>{if(a.key!==b.key)segments.get(level).push({a,b})}
+ const addSegment=(level,a,b)=>{
+  if(a.key===b.key)return
+  const store=segments.get(level)
+  const vertexId=crossing=>{
+   let id=store.ids.get(crossing.key)
+   if(id===undefined){id=store.points.length;store.ids.set(crossing.key,id);store.points.push(crossing.point);store.adjacency.push([])}
+   return id
+  }
+  const aId=vertexId(a),bId=vertexId(b),id=store.pairs.length/2
+  store.pairs.push(aId,bId);store.adjacency[aId].push(id);store.adjacency[bId].push(id)
+ }
 
  const splitAxes=(values9,width,height)=>{
   const [a,b,c,d,bm,rm,tm,lm,cm]=values9
@@ -107,7 +119,7 @@ export function buildAdaptiveContourPaths({sample,extent,atlasExtent,levels,maxD
   }else if(splitY){
    visit(x,y,width,height/2,depthX,depthY+1)
    visit(x,my,width,height/2,depthX,depthY+1)
-  }else leaves.push({x,y,width,height})
+  }else leaves.push(x,y,width,height)
  }
  visit(0,0,nx,ny,0,0)
 
@@ -139,7 +151,8 @@ export function buildAdaptiveContourPaths({sample,extent,atlasExtent,levels,maxD
    else{addSegment(level,crossings[0],crossings[3]);addSegment(level,crossings[1],crossings[2])}
   }
  }
- for(const {x,y,width,height} of leaves){
+ for(let leaf=0;leaf<leaves.length;leaf+=4){
+  const x=leaves[leaf],y=leaves[leaf+1],width=leaves[leaf+2],height=leaves[leaf+3]
   const xs=new Set([...linePoints(false,y,x,x+width),...linePoints(false,y+height,x,x+width)].map(point=>point.x))
   const ys=new Set([...linePoints(true,x,y,y+height),...linePoints(true,x+width,y,y+height)].map(point=>point.y))
   const columns=[...xs].sort((a,b)=>a-b),rows=[...ys].sort((a,b)=>a-b)
@@ -152,34 +165,26 @@ export function buildAdaptiveContourPaths({sample,extent,atlasExtent,levels,maxD
   }
  }
 
- const trace=level=>{
-  const lines=segments.get(level),adjacent=new Map()
-  for(let i=0;i<lines.length;i++)for(const endpoint of [lines[i].a,lines[i].b]){
-   if(!adjacent.has(endpoint.key))adjacent.set(endpoint.key,[])
-   adjacent.get(endpoint.key).push(i)
-  }
-  const visited=new Uint8Array(lines.length),paths=[]
+ const trace=store=>{
+  const {pairs,points,adjacency}=store,lines=pairs.length/2,visited=new Uint8Array(lines),paths=[]
   const follow=(first,start)=>{
-   const points=[],origin=start.key;let index=first,current=start
+   const pathPoints=[],origin=start;let index=first,current=start
    while(index!==undefined&&!visited[index]){
     visited[index]=1
-    const segment=lines[index],next=segment.a.key===current.key?segment.b:segment.a
-    points.push(current.point);current=next
-    index=(adjacent.get(current.key)||[]).find(id=>!visited[id])
+    const a=pairs[index*2],b=pairs[index*2+1],next=a===current?b:a
+    pathPoints.push(points[current]);current=next
+    index=adjacency[current].find(id=>!visited[id])
    }
-   points.push(current.point)
-   return {points,closed:current.key===origin}
+   pathPoints.push(points[current])
+   return {points:pathPoints,closed:current===origin}
   }
-  for(const [key,ids] of adjacent)if(ids.length===1&&!visited[ids[0]]){
-   const segment=lines[ids[0]],start=segment.a.key===key?segment.a:segment.b
-   paths.push(follow(ids[0],start))
-  }
-  for(let i=0;i<lines.length;i++)if(!visited[i])paths.push(follow(i,lines[i].a))
+  for(let vertex=0;vertex<adjacency.length;vertex++)if(adjacency[vertex].length===1&&!visited[adjacency[vertex][0]])paths.push(follow(adjacency[vertex][0],vertex))
+  for(let i=0;i<lines;i++)if(!visited[i])paths.push(follow(i,pairs[i*2]))
   return paths
  }
  const tolerance=Math.min(spanX/2**maxDepthX,spanY/2**maxDepthY)*.025
  const round=value=>Math.round(value*1e8)/1e8,paths=[]
- for(const {step,value} of levels)for(const path of trace(value)){
+ for(const {step,value} of levels)for(const path of trace(segments.get(value))){
   if(path.points.length<2)continue
   const coordinates=path.points.map(([x,y])=>[left+x/nx*spanX,bottom+y/ny*spanY])
   const curves=fitContour(coordinates,tolerance).map(curve=>curve.flatMap(([x,y])=>[

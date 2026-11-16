@@ -15,7 +15,7 @@ export class ContourAtlasPreparer{
  createWorker(){
   if(this.worker)return true
   try{
-   this.worker=new Worker(new URL('./contour-atlas-worker.js?v=atlas-builder-v3',import.meta.url),{type:'module'})
+   this.worker=new Worker(new URL('./contour-atlas-worker.js?v=atlas-builder-v4',import.meta.url),{type:'module'})
    this.worker.onmessage=event=>this.receive(event.data)
    this.worker.onerror=event=>this.failAll(event.message||'Contour atlas worker failed')
   }catch{this.worker=null}
@@ -52,11 +52,14 @@ export class ContourAtlasPreparer{
    return
   }
   this.pending.delete(entry.key)
-  if(message.type==='error'){entry.reject(Error(message.error));return}
+  if(message.type==='error'){
+   entry.reject(Error(message.error));this.retireWorkerIfIdle();return
+  }
   try{localStorage.setItem(entry.key,message.json)}catch{}
   if(!entry.hasUpdates)for(const listener of entry.listeners)try{listener(message.data,'complete')}catch(error){console.error('Contour atlas update callback failed:',error)}
-  entry.resolve(message.data)
+  entry.resolve(message.data);this.retireWorkerIfIdle()
  }
+ retireWorkerIfIdle(){if(this.pending.size===0&&this.worker){this.worker.terminate();this.worker=null}}
  failAll(message){
   for(const entry of this.pending.values())entry.reject(Error(message))
   this.pending.clear()

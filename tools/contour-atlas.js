@@ -1,6 +1,6 @@
 import '../src/map/projections/index.js?v=grieger-wrap'
 import {get} from 'ol/proj.js'
-import {buildAdaptiveContourAtlas} from '../src/map/reprojection/contour-atlas-builder.js?v=atlas-builder-v3'
+import {buildAdaptiveContourAtlas} from '../src/map/reprojection/contour-atlas-builder.js?v=atlas-builder-v4'
 window.generateContourAtlas=(code,coordinates)=>{
  const target=get(code),source=get('EPSG:3857'),coordinateProjection=coordinates==='source'?source:target
  return buildAdaptiveContourAtlas(target,source,{coordinateProjection,minQuarter:-80,maxQuarter:80})

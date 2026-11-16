@@ -1,6 +1,6 @@
 import {get,PROJECTION_STRINGS} from '../projections/worker-index.js'
 import {MAX_SOURCE_ZOOM} from './contour-atlas-config.js'
-import {ContourAtlas} from './contour-atlas-builder.js?v=atlas-builder-v3'
+import {ContourAtlas} from './contour-atlas-builder.js?v=atlas-builder-v4'
 
 self.addEventListener('message',event=>{
  const message=event.data
