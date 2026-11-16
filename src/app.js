@@ -8,8 +8,10 @@ import {ProjectionViewport,ProjectionUnavailableError} from './map/projections/v
 import {CanonicalZoom} from './map/projections/canonical-zoom.js'
 import {ZoomBandSource} from './map/reprojection/zoom-band-source.js?v=source-loads'
 import {ContourReprojection} from './map/reprojection/contour-reprojection.js?v=supervisor-v4'
+import {enableTileLoadingWhileInteracting} from './map/interactive-tile-loading.js'
 const baseSource=new (ZoomBandSource(XYZ))({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})
 const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({preload:2,cacheSize:16384,source:baseSource})],view:createMapView('EPSG:3857',[10,50],4)})
+enableTileLoadingWhileInteracting(map)
 const contourReprojection=new ContourReprojection(map,{steps:4})
 baseSource.configureZoomBands(contourReprojection)
 if(new URL(location.href).searchParams.get('debugBands')==='1')import('./map/reprojection/debug-overlay.js?v=steps-v1').then(({ContourDebugOverlay})=>new ContourDebugOverlay(map,contourReprojection))
