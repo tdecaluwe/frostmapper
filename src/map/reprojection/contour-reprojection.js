@@ -3,12 +3,13 @@ import {wrapAndSliceX} from 'ol/extent.js'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
 import {ContourPlanClient} from './contour-plan-client.js?v=incremental-mask'
 import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r5'
-import {ContourAtlasPreparer} from './contour-atlas-preparer.js?v=atlas-fast-v2'
+import {ContourAtlasPreparer} from './contour-atlas-preparer.js?v=atlas-fast-v3'
 
 function eachSpan(spans,callback){
  if(ArrayBuffer.isView(spans)){for(let i=0;i<spans.length;i+=4)callback({x:spans[i],y:spans[i+1],width:spans[i+2],band:spans[i+3]});return}
  for(const span of spans)callback(span)
 }
+const intersects=(a,b)=>a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1]
 function tileAnchor(extent,width,height,distortionAt){
  const samples=[[.5,.5],[.25,.5],[.75,.5],[.5,.25],[.5,.75],[.25,.25],[.75,.25],[.25,.75],[.75,.75]]
  for(const [fx,fy] of samples){
@@ -36,7 +37,7 @@ function splitTile(extent,width,height,anchorAt,minimumQuarter){
 // plans. The source adapter below owns OpenLayers integration for each layer.
 export class ContourReprojection {
  constructor(map){
-  this.map=map;this.sourceAtlases=new Map();this.fields=new Map();this.sources=new Set();this.assemblers=new WeakMap();this.signature='none';this.atlasPreparer=new ContourAtlasPreparer()
+  this.map=map;this.sourceAtlases=new Map();this.atlasRevisions=new Map();this.fields=new Map();this.sources=new Set();this.assemblers=new WeakMap();this.signature='none';this.atlasPreparer=new ContourAtlasPreparer()
   this.planWorker=new ContourPlanClient()
   map.on('change:view',()=>this.update())
   this.update()
@@ -49,19 +50,26 @@ export class ContourReprojection {
   if(!source){this.setSignature('none');return}
   if(!this.sourceAtlases.has(code)){
    this.sourceAtlases.set(code,null)
-   this.atlasPreparer.prepare(code,'source').then(data=>{
+   this.atlasPreparer.prepare(code,'source',data=>{
     if(data.target!==code||data.source!=='EPSG:3857'||data.coordinateProjection!=='EPSG:3857')throw Error('Source contour projection mismatch')
-    this.sourceAtlases.set(code,data);this.planWorker.register(`${code}:source`,data);for(const item of this.sources)item.changed();this.update()
-   }).catch(error=>{console.error('Source contour atlas preparation failed:',error);this.sourceAtlases.set(code,false)})
+    this.sourceAtlases.set(code,data);this.atlasRevisions.set(code,(this.atlasRevisions.get(code)||0)+1);this.planWorker.register(`${code}:source`,data)
+    if(this.map.getView().getProjection().getCode()===code){const alreadyActive=this.signature===code;this.setSignature(code);if(alreadyActive)for(const item of this.sources)item.changed()}
+   }).catch(error=>{
+    console.error('Source contour atlas preparation failed:',error)
+    this.sourceAtlases.set(code,false);this.atlasRevisions.set(code,(this.atlasRevisions.get(code)||0)+1)
+    if(this.map.getView().getProjection().getCode()===code)this.setSignature('none')
+   })
   }
   if(this.sourceAtlases.get(code))this.setSignature(code)
   else this.setSignature('none')
  }
  sourcePlan(source,code,key,extent,width,height,minimumQuarter,field){
-  const id=`${code}:source`,cached=this.planWorker.peek(id,key)
+  const atlas=this.sourceAtlases.get(code)
+  if(atlas?.unrefinedExtents?.some(region=>intersects(extent,region)))return {ready:false,complete:false,spans:null}
+  const id=`${code}:source`,versionedKey=`${key}|atlas:${this.atlasRevisions.get(code)||0}`,cached=this.planWorker.peek(id,versionedKey)
   if(cached)return cached
   const anchorAt=(tileExtent,tileWidth,tileHeight)=>tileAnchor(tileExtent,tileWidth,tileHeight,point=>field.atSource(point))
-  return this.planWorker.enqueue(id,key,()=>({extent,width,height,anchor:anchorAt(extent,width,height),minimumQuarter}),source,()=>splitTile(extent,width,height,anchorAt,minimumQuarter))
+  return this.planWorker.enqueue(id,versionedKey,()=>({extent,width,height,anchor:anchorAt(extent,width,height),minimumQuarter}),source,()=>splitTile(extent,width,height,anchorAt,minimumQuarter))
  }
  footprintPlan(source,code,z,coord,sourceExtent,reference,minimumQuarter,field){
   const sourceProjection=source.getProjection(),parts=wrapAndSliceX(sourceExtent.slice(),sourceProjection,true)
@@ -91,7 +99,7 @@ export class ContourReprojection {
   this.sources.add(source);const original=source.getTile,originalKey=source.getKey,manager=this
   const originalInternal=source.getTileInternal
   const assembler=new SourceTileAssembler(source);this.assemblers.set(source,assembler)
-  source.getKey=function(){return `${originalKey.call(this)}|bands:${manager.signature}|${manager.sourceAtlases.get(manager.signature)?'ready':'pending'}|plans:${manager.planWorker.revision}`}
+  source.getKey=function(){return `${originalKey.call(this)}|bands:${manager.signature}|atlas:${manager.atlasRevisions.get(manager.signature)||0}|${manager.sourceAtlases.get(manager.signature)?'ready':'pending'}|plans:${manager.planWorker.revision}`}
   source.getTile=function(z,x,y,pixelRatio,target){
    const src=this.getProjection(),atlas=target&&manager.sourceAtlases.get(target.getCode())
    if(!atlas||!src||src.getCode()!=='EPSG:3857'||equivalent(src,target))return original.call(this,z,x,y,pixelRatio,target)

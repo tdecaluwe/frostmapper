@@ -10,7 +10,7 @@ export class ContourPlanClient {
   }catch{this.worker=null}
  }
  register(id,data){
-  if(!this.worker||this.atlases.has(id))return
+  if(!this.worker)return
   this.atlases.add(id);this.worker.postMessage({type:'atlas',id,data})
  }
  peek(atlas,key){
