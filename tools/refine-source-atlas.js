@@ -1,5 +1,5 @@
-import {get,transform} from 'ol/proj.js'
-import {DistortionField} from '../src/map/reprojection/distortion.js'
+import {get,transform} from 'https://esm.sh/ol@10.6.1/proj.js'
+import {DistortionField} from '../src/map/reprojection/distortion.js?v=runtime-atlas'
 import {traceContours} from '../src/map/reprojection/contour-trace.js'
 import {fitContour} from '../src/map/reprojection/curve-fit.js'
 
@@ -39,7 +39,7 @@ export function refineTriptychialSourceAtlas(atlas,{tolerance=.05}={}){
 
 // The Galápagos point and the triptych borders need denser, locally fitted
 // contours so open paths remain separable at the projection edge.
-export function refineTriptychialTargetAtlas(atlas,{width=1025,height=1025,tolerance=.05}={}){
+export function refineTriptychialTargetAtlas(atlas,{width=1025,height=1025,tolerance=.05,maxQuarter=32}={}){
  const target=get('FROST:TRIPTYCHIAL'),source=get('EPSG:3857'),field=new DistortionField(target,source),domain=atlas.extent
  const round=value=>Math.round(value*1e8)/1e8
  const center=transform([-90,0],'EPSG:4326',target),regions=[
@@ -56,7 +56,7 @@ export function refineTriptychialTargetAtlas(atlas,{width=1025,height=1025,toler
    return Math.max(...xs)>=box[0]&&Math.min(...xs)<=box[2]&&Math.max(...ys)>=box[1]&&Math.min(...ys)<=box[3]
   }
   atlas.paths=atlas.paths.filter(path=>!path.curves.some(overlaps))
-  for(let quarter=-80;quarter<=32;quarter+=4)for(const path of traceContours(values,width,height,quarter/4)){
+  for(let quarter=-80;quarter<=maxQuarter;quarter+=4)for(const path of traceContours(values,width,height,quarter/4)){
    if(path.points.length<2)continue
    const curves=fitContour(path.points,tolerance).map(curve=>curve.flatMap(([x,y])=>[
     round((left+x*dx-domain[0])/(domain[2]-domain[0])),round((top-y*dy-domain[1])/(domain[3]-domain[1]))

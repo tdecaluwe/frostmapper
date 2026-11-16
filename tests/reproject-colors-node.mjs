@@ -50,7 +50,7 @@ assembler.getTile=function(z,x,y,pixelRatio,projection,options){
  sourceTiles.push({extent,reference:options.reference,minimumZoom:options.minimumZoom,maximumZoom:options.maximumZoom})
  return assemble(z,x,y,pixelRatio,projection,options)
 }
-const read=name=>JSON.parse(require('fs').readFileSync(name==='source-frost-triptychial.json'&&process.env.FROSTMAPPER_ATLAS?process.env.FROSTMAPPER_ATLAS:new URL(`../data/contours/${name}`,import.meta.url),'utf8'))
+const read=name=>JSON.parse(require('fs').readFileSync(name==='source-frost-triptychial.json'&&process.env.FROSTMAPPER_ATLAS?process.env.FROSTMAPPER_ATLAS:new URL(`./fixtures/contours/${name}`,import.meta.url),'utf8'))
 manager.atlases.set(target.getCode(),new ContourAtlas(read('frost-triptychial.json')))
 manager.sourceAtlases.set(target.getCode(),new ContourAtlas(read('source-frost-triptychial.json')))
 activeProjection=target;manager.setSignature(target.getCode())

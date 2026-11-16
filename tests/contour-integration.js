@@ -3,8 +3,8 @@ import XYZ from 'ol/source/XYZ.js'
 import TileState from 'ol/TileState.js'
 import {get} from 'ol/proj.js'
 import {guardReprojection} from '../src/map/layers/reprojection-budget.js?v=contour-bands'
-import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r3'
-import {AssembledZoomTile} from '../src/map/reprojection/source-assembler.js?v=worker-plans-r3'
+import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r4'
+import {AssembledZoomTile} from '../src/map/reprojection/source-assembler.js?v=worker-plans-r4'
 
 const errors=[],projection=get('FROST:TRIPTYCHIAL'),sourceProjection=get('EPSG:3857')
 let activeProjection=projection
@@ -12,7 +12,7 @@ const map={on(){},getView(){return {getProjection:()=>activeProjection,getResolu
 const source=new XYZ({projection:'EPSG:3857',tileUrlFunction:([z])=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="hsl(${z*24} 80% 50%)"/></svg>`)}`,maxZoom:14,crossOrigin:'anonymous'})
 guardReprojection(source)
 const manager=new ContourReprojection(map);manager.addSource(source)
-const targetData=await(await fetch('../data/contours/frost-triptychial.json')).json(),sourceData=await(await fetch('../data/contours/source-frost-triptychial.json')).json()
+const targetData=await(await fetch('./fixtures/contours/frost-triptychial.json')).json(),sourceData=await(await fetch('./fixtures/contours/source-frost-triptychial.json')).json()
 manager.atlases.set(projection.getCode(),new (await import('../src/map/reprojection/contour-atlas.js')).ContourAtlas(targetData))
 manager.sourceAtlases.set(projection.getCode(),new (await import('../src/map/reprojection/contour-atlas.js')).ContourAtlas(sourceData))
 manager.planWorker.register(`${projection.getCode()}:target`,targetData);manager.planWorker.register(`${projection.getCode()}:source`,sourceData)

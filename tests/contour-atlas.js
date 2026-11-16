@@ -30,7 +30,7 @@ check(atlas.query([2,2,3,3]).length===0,'outside extent lookup')
 }
 {
  for(const file of ['epsg-3035','epsg-peirce','frost-triptychial']){
-  const response=await fetch(`../data/contours/${file}.json`),data=await response.json(),atlas=new ContourAtlas(data)
+  const response=await fetch(`./fixtures/contours/${file}.json`),data=await response.json(),atlas=new ContourAtlas(data)
   check(data.paths.length>0&&atlas.segments.length>0,`${file} missing contour data`)
   check(atlas.query([0,0,1,1]).length===atlas.segments.length,`${file} index dropped segments`)
   check(data.paths.every(path=>path.quarter%4===0),`${file} contains a fractional contour`)

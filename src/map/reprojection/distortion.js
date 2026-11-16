@@ -1,4 +1,6 @@
-import {transform} from 'ol/proj.js'
+// Absolute CDN URL also lets the atlas generator import this module from a
+// native module worker, where the document's import map is not available.
+import {transform} from 'https://esm.sh/ol@10.6.1/proj.js'
 
 // Use a central difference where possible and an inward, second-order
 // difference at a domain edge. Undefined samples must never be clamped into

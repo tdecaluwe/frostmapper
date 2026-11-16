@@ -1,4 +1,4 @@
-import {DistortionField} from './distortion.js'
+import {DistortionField} from './distortion.js?v=runtime-atlas'
 import {traceContours} from './contour-trace.js'
 import {fitContour} from './curve-fit.js'
 import {ContourAtlas} from './contour-atlas-index.js'

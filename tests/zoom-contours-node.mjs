@@ -6,7 +6,7 @@ import {HORIZONTAL_HALF_HEIGHT} from '../src/map/projections/peirce-horizontal.j
 import {ContourAtlas} from '../src/map/reprojection/contour-atlas-index.js'
 import {BandMaskPlanner} from '../src/map/reprojection/band-mask.js'
 
-const data=JSON.parse(await readFile(process.env.FROSTMAPPER_ATLAS||new URL('../data/contours/source-frost-triptychial.json',import.meta.url),'utf8'))
+const data=JSON.parse(await readFile(process.env.FROSTMAPPER_ATLAS||new URL('./fixtures/contours/source-frost-triptychial.json',import.meta.url),'utf8'))
 let oblique
 registerOblique({Proj:{projections:{add:definition=>{oblique=definition}}}})
 const projection=Object.assign(Object.create(oblique),{o_proj:'peirce_q',o_type:'horizontal',o_lat_p:-45,o_lon_p:45,o_scrollx:-.25,a:6378137,k0:1,long0:0})

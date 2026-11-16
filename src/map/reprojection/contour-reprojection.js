@@ -1,10 +1,9 @@
 import {equivalent} from 'ol/proj.js'
-import {ContourAtlas} from './contour-atlas.js?v=worker-plans-r3'
-import {DistortionField} from './distortion.js'
+import {DistortionField} from './distortion.js?v=runtime-atlas'
 import {ContourPlanClient} from './contour-plan-client.js?v=incremental-mask'
-import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r3'
+import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r4'
+import {ContourAtlasPreparer} from './contour-atlas-preparer.js?v=runtime-atlas'
 
-const FILES={'EPSG:3035':'epsg-3035','EPSG:PEIRCE':'epsg-peirce','FROST:TRIPTYCHIAL':'frost-triptychial'}
 function eachSpan(spans,callback){
  if(ArrayBuffer.isView(spans)){for(let i=0;i<spans.length;i+=4)callback({x:spans[i],y:spans[i+1],width:spans[i+2],band:spans[i+3]});return}
  for(const span of spans)callback(span)
@@ -36,7 +35,7 @@ function splitTile(extent,width,height,anchorAt,minimumQuarter){
 // plans. The source adapter below owns OpenLayers integration for each layer.
 export class ContourReprojection {
  constructor(map){
-  this.map=map;this.atlases=new Map();this.sourceAtlases=new Map();this.fields=new Map();this.sources=new Set();this.assemblers=new WeakMap();this.signature='none'
+  this.map=map;this.atlases=new Map();this.sourceAtlases=new Map();this.fields=new Map();this.sources=new Set();this.assemblers=new WeakMap();this.signature='none';this.atlasPreparer=new ContourAtlasPreparer()
   this.planWorker=new ContourPlanClient()
   map.on('change:view',()=>this.update())
   map.on('moveend',()=>this.prepareViewport())
@@ -44,23 +43,23 @@ export class ContourReprojection {
  }
  field(target,source){const key=`${target.getCode()}|${source.getCode()}`;if(!this.fields.has(key))this.fields.set(key,new DistortionField(target,source));return this.fields.get(key)}
  update(){
-  const view=this.map.getView(),projection=view.getProjection(),code=projection.getCode(),file=FILES[code]
-  if(!file){this.setSignature('none');return}
+  const view=this.map.getView(),projection=view.getProjection(),code=projection.getCode()
+  if(!['EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL'].includes(code)){this.setSignature('none');return}
   if(!this.atlases.has(code)){
    this.atlases.set(code,null)
-   fetch(new URL(`../../../data/contours/${file}.json?v=worker-plans-r3`,import.meta.url)).then(r=>{if(!r.ok)throw Error(`Contour data ${r.status}`);return r.json()}).then(data=>{
+   this.atlasPreparer.prepare(code,'target').then(data=>{
     if(data.target!==code||data.source!=='EPSG:3857')throw Error('Contour projection mismatch')
-    this.atlases.set(code,new ContourAtlas(data));this.planWorker.register(`${code}:target`,data);this.update();this.prepareViewport()
-   }).catch(error=>{console.error('Contour data unavailable:',error);this.atlases.set(code,false)})
+    this.atlases.set(code,true);this.planWorker.register(`${code}:target`,data);this.update();this.prepareViewport()
+   }).catch(error=>{console.error('Contour atlas preparation failed:',error);this.atlases.set(code,false)})
   }
   const atlas=this.atlases.get(code),source=[...this.sources].find(s=>s.getProjection()?.getCode()==='EPSG:3857')
   if(!atlas||!source){this.setSignature('none');return}
   if(!this.sourceAtlases.has(code)){
    this.sourceAtlases.set(code,null)
-   fetch(new URL(`../../../data/contours/source-${FILES[code]}.json?v=worker-plans-r3`,import.meta.url)).then(r=>{if(!r.ok)throw Error(`Source contour data ${r.status}`);return r.json()}).then(data=>{
+   this.atlasPreparer.prepare(code,'source').then(data=>{
     if(data.target!==code||data.source!=='EPSG:3857'||data.coordinateProjection!=='EPSG:3857')throw Error('Source contour projection mismatch')
-    this.sourceAtlases.set(code,new ContourAtlas(data));this.planWorker.register(`${code}:source`,data);for(const item of this.sources)item.changed();this.update();this.prepareViewport()
-   }).catch(error=>{console.error('Source contour data unavailable:',error);this.sourceAtlases.set(code,false)})
+    this.sourceAtlases.set(code,true);this.planWorker.register(`${code}:source`,data);for(const item of this.sources)item.changed();this.update();this.prepareViewport()
+   }).catch(error=>{console.error('Source contour atlas preparation failed:',error);this.sourceAtlases.set(code,false)})
   }
   this.setSignature(code)
  }

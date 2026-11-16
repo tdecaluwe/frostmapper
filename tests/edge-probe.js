@@ -4,11 +4,11 @@ import {get} from 'ol/proj.js'
 import {getForProjection} from 'ol/tilegrid.js'
 import {DistortionField} from '../src/map/reprojection/distortion.js'
 import {ContourAtlas} from '../src/map/reprojection/contour-atlas.js'
-import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r3'
+import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r4'
 
 const p=get('FROST:TRIPTYCHIAL'),src=get('EPSG:3857'),field=new DistortionField(p,src),result={},errors=[]
 const map={on(){},getView(){return {getProjection:()=>p}},getSize(){return [800,600]}}
-const source=new XYZ({projection:'EPSG:3857'}),manager=new ContourReprojection(map),data=await(await fetch('../data/contours/frost-triptychial.json')).json()
+const source=new XYZ({projection:'EPSG:3857'}),manager=new ContourReprojection(map),data=await(await fetch('./fixtures/contours/frost-triptychial.json')).json()
 const atlas=new ContourAtlas(data),grid=source.getTileGridForProjection(p),sourceGrid=source.getTileGridForProjection(src)
 manager.atlases.set(p.getCode(),atlas);manager.planWorker.register(`${p.getCode()}:target`,data)
 const bandAt=(spans,x,y)=>{
