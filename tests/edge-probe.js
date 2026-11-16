@@ -2,7 +2,7 @@ import '../src/map/projections/index.js?v=grieger-wrap'
 import XYZ from 'ol/source/XYZ.js'
 import {get} from 'ol/proj.js'
 import {DistortionField} from '../src/map/reprojection/distortion.js'
-import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r4'
+import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r5'
 
 const p=get('FROST:TRIPTYCHIAL'),src=get('EPSG:3857'),field=new DistortionField(p,src),result={},errors=[]
 const map={on(){},getView(){return {getProjection:()=>p}},getSize(){return [800,600]}}

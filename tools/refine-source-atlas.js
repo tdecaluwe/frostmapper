@@ -1,6 +1,6 @@
 import {get,transform} from 'https://esm.sh/ol@10.6.1/proj.js'
-import {DistortionField} from '../src/map/reprojection/distortion.js?v=runtime-atlas'
-import {traceContours} from '../src/map/reprojection/contour-trace.js'
+import {DistortionField} from '../src/map/reprojection/distortion.js?v=atlas-fast-v1'
+import {traceContoursMulti} from '../src/map/reprojection/contour-trace.js?v=atlas-fast-v1'
 import {fitContour} from '../src/map/reprojection/curve-fit.js'
 
 // The global source grid is intentionally coarse near Grieger's Galápagos
@@ -22,7 +22,8 @@ export function refineTriptychialSourceAtlas(atlas,{tolerance=.05}={}){
   const normBox=[(left-domain[0])/(domain[2]-domain[0]),(bottom-domain[1])/(domain[3]-domain[1]),(right-domain[0])/(domain[2]-domain[0]),(top-domain[1])/(domain[3]-domain[1])]
   const levels=new Set(quarters)
   atlas.paths=atlas.paths.filter(path=>!levels.has(path.quarter)||!path.curves.some(curve=>overlaps(curve,normBox)))
-  for(const quarter of quarters)for(const path of traceContours(values,width,height,quarter/4)){
+  const contours=traceContoursMulti(values,width,height,quarters.map(quarter=>quarter/4))
+  for(const quarter of quarters)for(const path of contours.get(quarter/4)||[]){
    if(path.points.length<2)continue
    const curves=fitContour(path.points,tolerance).map(curve=>curve.flatMap(([x,y])=>{
     const px=(left+x*dx-domain[0])/(domain[2]-domain[0]),py=(bottom+y*dy-domain[1])/(domain[3]-domain[1])
@@ -56,7 +57,9 @@ export function refineTriptychialTargetAtlas(atlas,{width=1025,height=1025,toler
    return Math.max(...xs)>=box[0]&&Math.min(...xs)<=box[2]&&Math.max(...ys)>=box[1]&&Math.min(...ys)<=box[3]
   }
   atlas.paths=atlas.paths.filter(path=>!path.curves.some(overlaps))
-  for(let quarter=-80;quarter<=maxQuarter;quarter+=4)for(const path of traceContours(values,width,height,quarter/4)){
+  const quarters=[];for(let quarter=-80;quarter<=maxQuarter;quarter+=4)quarters.push(quarter)
+  const contours=traceContoursMulti(values,width,height,quarters.map(quarter=>quarter/4))
+  for(const quarter of quarters)for(const path of contours.get(quarter/4)||[]){
    if(path.points.length<2)continue
    const curves=fitContour(path.points,tolerance).map(curve=>curve.flatMap(([x,y])=>[
     round((left+x*dx-domain[0])/(domain[2]-domain[0])),round((top-y*dy-domain[1])/(domain[3]-domain[1]))

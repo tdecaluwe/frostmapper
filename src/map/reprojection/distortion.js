@@ -61,21 +61,38 @@ export function projectionDistortion(target,source,point,step=100){
  return distortionAt(point,{sample,step,sourceWorldWidth:sourceWidth})
 }
 
+// In source coordinates the Jacobian is the inverse of the target-to-source
+// Jacobian. Sampling the forward transform avoids repeatedly transforming
+// every finite-difference neighbor back and forth through both projections.
+function projectionDistortionFromSource(target,source,point,step=100){
+ if(!point?.every(Number.isFinite)||!Number.isFinite(step)||step<=0)return null
+ const sourceExtent=source.getExtent(),targetExtent=target.getExtent(),sourceWidth=source.canWrapX()&&sourceExtent?sourceExtent[2]-sourceExtent[0]:0,targetWidth=target.canWrapX()&&targetExtent?targetExtent[2]-targetExtent[0]:0
+ const inside=(coordinate,extent,worldWidth)=>!extent||coordinate[1]>=extent[1]&&coordinate[1]<=extent[3]&&(worldWidth>0||coordinate[0]>=extent[0]&&coordinate[0]<=extent[2])
+ if(!inside(point,sourceExtent,sourceWidth))return null
+ try{
+  const center=transform(point,source,target)
+  if(!center.every(Number.isFinite)||!inside(center,targetExtent,targetWidth))return null
+  const back=transform(center,target,source)
+  if(!back.every(Number.isFinite))return null
+  let dx=back[0]-point[0]
+  if(sourceWidth)dx-=sourceWidth*Math.round(dx/sourceWidth)
+  if(Math.hypot(dx,back[1]-point[1])>Math.max(1,step*.01))return null
+  const sample=coordinate=>{
+   if(!inside(coordinate,sourceExtent,sourceWidth))return null
+   const result=transform(coordinate,source,target)
+   return result.every(Number.isFinite)&&inside(result,targetExtent,targetWidth)?result:null
+  }
+  const value=distortionAt(point,{sample,step,sourceWorldWidth:targetWidth})
+  return value===null?null:-value
+ }catch{return null}
+}
+
 // Projection-pair data is independent of the viewport and can be shared by
 // layers that use the same source coordinate system.
 export class DistortionField {
  constructor(target,source,{step=100}={}){this.target=target;this.source=source;this.step=step}
  at(point){return projectionDistortion(this.target,this.source,point,this.step)}
  atSource(point){
-  try{
-   const target=transform(point,this.source,this.target),extent=this.target.getExtent()
-   if(!target.every(Number.isFinite)||extent&&(target[1]<extent[1]||target[1]>extent[3]||(!this.target.canWrapX()&&(target[0]<extent[0]||target[0]>extent[2]))))return null
-   const back=transform(target,this.target,this.source),sourceExtent=this.source.getExtent()
-   if(!back.every(Number.isFinite))return null
-   let dx=back[0]-point[0]
-   if(this.source.canWrapX()&&sourceExtent){const width=sourceExtent[2]-sourceExtent[0];dx-=width*Math.round(dx/width)}
-   if(Math.hypot(dx,back[1]-point[1])>Math.max(1,this.step*.01))return null
-   return this.at(target)
-  }catch{return null}
+  return projectionDistortionFromSource(this.target,this.source,point,this.step)
  }
 }

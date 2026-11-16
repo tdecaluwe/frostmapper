@@ -1,9 +1,9 @@
 import {equivalent} from 'ol/proj.js'
 import {wrapAndSliceX} from 'ol/extent.js'
-import {DistortionField} from './distortion.js?v=runtime-atlas'
+import {DistortionField} from './distortion.js?v=atlas-fast-v1'
 import {ContourPlanClient} from './contour-plan-client.js?v=incremental-mask'
-import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r4'
-import {ContourAtlasPreparer} from './contour-atlas-preparer.js?v=runtime-atlas'
+import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r5'
+import {ContourAtlasPreparer} from './contour-atlas-preparer.js?v=atlas-fast-v1'
 
 function eachSpan(spans,callback){
  if(ArrayBuffer.isView(spans)){for(let i=0;i<spans.length;i+=4)callback({x:spans[i],y:spans[i+1],width:spans[i+2],band:spans[i+3]});return}

@@ -3,8 +3,8 @@ import XYZ from 'ol/source/XYZ.js'
 import TileState from 'ol/TileState.js'
 import {get} from 'ol/proj.js'
 import {guardReprojection} from '../src/map/layers/reprojection-budget.js?v=contour-bands'
-import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r4'
-import {AssembledZoomTile} from '../src/map/reprojection/source-assembler.js?v=worker-plans-r4'
+import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r5'
+import {AssembledZoomTile} from '../src/map/reprojection/source-assembler.js?v=worker-plans-r5'
 
 const errors=[],projection=get('FROST:TRIPTYCHIAL'),sourceProjection=get('EPSG:3857')
 let activeProjection=projection

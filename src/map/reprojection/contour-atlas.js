@@ -1,10 +1,10 @@
-import {DistortionField} from './distortion.js?v=runtime-atlas'
-import {traceContours} from './contour-trace.js'
+import {DistortionField} from './distortion.js?v=atlas-fast-v1'
+import {traceContoursMulti} from './contour-trace.js?v=atlas-fast-v1'
 import {fitContour} from './curve-fit.js'
 import {ContourAtlas} from './contour-atlas-index.js'
 export {ContourAtlas} from './contour-atlas-index.js'
 
-// Builds static projection-pair contour data. Coordinates are normalized to
+// Builds projection-pair contour data. Coordinates are normalized to
 // the projection extent, independent of zoom and viewport dimensions.
 export class ContourAtlasBuilder {
  constructor(target,source,{width=target.getCode()==='FROST:TRIPTYCHIAL'?2049:1025,height=target.getCode()==='FROST:TRIPTYCHIAL'?1025:513,minQuarter=-80,maxQuarter=32,tolerance=.2,coordinateProjection=target}={}){
@@ -20,8 +20,11 @@ export class ContourAtlasBuilder {
   for(let y=0;y<height;y++)for(let x=0;x<width;x++)values[y*width+x]=sample([x0+x*dx,y0+y*dy])??NaN
   const paths=[]
   const round=value=>Math.round(value*1e7)/1e7
-  for(let quarter=this.minQuarter;quarter<=this.maxQuarter;quarter+=4){
-   for(const path of traceContours(values,width,height,quarter/4)){
+  const levels=[]
+  for(let quarter=this.minQuarter;quarter<=this.maxQuarter;quarter+=4)levels.push(quarter)
+  const contours=traceContoursMulti(values,width,height,levels.map(quarter=>quarter/4))
+  for(const quarter of levels){
+   for(const path of contours.get(quarter/4)||[]){
     if(path.points.length<2)continue
     const curves=fitContour(path.points,this.tolerance).map(curve=>curve.flatMap(([x,y])=>[round(x/(width-1)),round(y/(height-1))]))
     paths.push({quarter,closed:path.closed,curves})
