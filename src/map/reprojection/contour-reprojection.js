@@ -1,7 +1,7 @@
 import {equivalent} from 'ol/proj.js'
 import {wrapAndSliceX} from 'ol/extent.js'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
-import {ContourPlanClient} from './contour-plan-client.js?v=incremental-mask-v2'
+import {ContourPlanClient} from './contour-plan-client.js?v=oriented-mask-v3'
 import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r7'
 import {ZoomLevelSupervisor} from './zoom-level-supervisor.js?v=supervisor-v5'
 

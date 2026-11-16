@@ -1,7 +1,7 @@
 import {PROJECTION_STRINGS} from '../projections/index.js?v=grieger-wrap'
 import {MAX_SOURCE_ZOOM} from './contour-atlas-config.js'
 
-const CACHE_PREFIX='frostmapper:contour-atlas:v11:'
+const CACHE_PREFIX='frostmapper:contour-atlas:v12:'
 
 export function contourAtlasCacheKey(targetDefinition,sourceDefinition,coordinateProjection,steps=4){
  return `${CACHE_PREFIX}${coordinateProjection}:steps=${steps}:${targetDefinition}:${sourceDefinition}`
@@ -15,7 +15,7 @@ export class ContourAtlasPreparer{
  createWorker(){
   if(this.worker)return true
   try{
-   this.worker=new Worker(new URL('./contour-atlas-worker.js?v=atlas-builder-v4',import.meta.url),{type:'module'})
+   this.worker=new Worker(new URL('./contour-atlas-worker.js?v=atlas-builder-oriented-v5',import.meta.url),{type:'module'})
    this.worker.onmessage=event=>this.receive(event.data)
    this.worker.onerror=event=>this.failAll(event.message||'Contour atlas worker failed')
   }catch{this.worker=null}
@@ -29,7 +29,7 @@ export class ContourAtlasPreparer{
    const cached=localStorage.getItem(key)
    if(cached){
     const data=JSON.parse(cached)
-    if(data.version===2&&data.target===targetCode&&data.source===sourceCode&&data.steps===steps&&data.coordinateProjection===(coordinateProjection==='source'?sourceCode:targetCode)&&data.targetDefinition===targetDefinition&&data.sourceDefinition===sourceDefinition&&data.highestSourceZoom===MAX_SOURCE_ZOOM){try{onUpdate(data,'complete')}catch(error){console.error('Contour atlas update callback failed:',error)}return Promise.resolve(data)}
+    if(data.version===3&&data.target===targetCode&&data.source===sourceCode&&data.steps===steps&&data.coordinateProjection===(coordinateProjection==='source'?sourceCode:targetCode)&&data.targetDefinition===targetDefinition&&data.sourceDefinition===sourceDefinition&&data.highestSourceZoom===MAX_SOURCE_ZOOM){try{onUpdate(data,'complete')}catch(error){console.error('Contour atlas update callback failed:',error)}return Promise.resolve(data)}
     localStorage.removeItem(key)
    }
   }catch{}

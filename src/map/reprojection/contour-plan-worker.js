@@ -1,5 +1,5 @@
-import {ContourAtlas} from './contour-atlas-index.js?v=steps-v2'
-import {BandMaskPlanner} from './band-mask.js?v=mask-fast-v2'
+import {ContourAtlas} from './contour-atlas-index.js?v=oriented-steps-v3'
+import {BandMaskPlanner} from './band-mask.js?v=oriented-mask-v3'
 import {get} from '../projections/worker-index.js'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
 
@@ -22,7 +22,11 @@ async function runPlan(message){
  try{
   const atlas=atlases.get(message.atlas),field=atlas&&fields.get(`${atlas.data.target}|${atlas.data.source}`)
   const anchor=message.anchor||(atlas&&field?tileAnchor(atlas,field,message.extent,message.width,message.height):null)
-  const chunks=atlas?planner.planChunks(atlas,message.extent,message.width,message.height,anchor,{minimumStep:message.minimumStep}):[{failed:true}]
+  const sourceCoordinates=atlas?.data.coordinateProjection===atlas?.data.source,valueAt=atlas&&field?(x,y)=>{
+   const [left,bottom,right,top]=message.extent,point=[left+x/message.width*(right-left),top-y/message.height*(top-bottom)]
+   return sourceCoordinates?field.atSource(point):field.at(point)
+  }:null
+  const chunks=atlas?planner.planChunks(atlas,message.extent,message.width,message.height,anchor,{minimumStep:message.minimumStep,valueAt}):[{failed:true}]
   for(const chunk of chunks){
    if(chunk.failed){
     if(message.depth<4)self.postMessage({type:'split',key:message.key})

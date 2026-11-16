@@ -187,10 +187,40 @@ export function buildAdaptiveContourPaths({sample,extent,atlasExtent,levels,maxD
  for(const {step,value} of levels)for(const path of trace(segments.get(value))){
   if(path.points.length<2)continue
   const coordinates=path.points.map(([x,y])=>[left+x/nx*spanX,bottom+y/ny*spanY])
-  const curves=fitContour(coordinates,tolerance).map(curve=>curve.flatMap(([x,y])=>[
-   round((x-ax0)/(ax1-ax0)),round((y-ay0)/(ay1-ay0))
-  ]))
-  paths.push({step,closed:path.closed,curves})
+  // Give each fitted isoline segment a consistent direction: values at or
+  // above the level are on the left. The contour tracer can join branches at
+  // singularities, so orient curves independently instead of assuming an
+  // entire traced path has one coherent direction.
+  const baseOffset=Math.min(spanX/workspace.nx,spanY/workspace.ny)
+  const orientations=[]
+  const curves=fitContour(coordinates,tolerance).map(input=>{
+   const curve=input.map(point=>point.slice())
+   let oriented=false,reverse=null,conflict=false
+   // A curve can span a large region and its midpoint may sit at a cut even
+   // when another section has a well-defined gradient. Probe several local
+   // tangents, requiring them to agree on the direction.
+   for(const t of [.15,.35,.5,.65,.85]){
+    const u=1-t,midpoint=[u**3*curve[0][0]+3*u*u*t*curve[1][0]+3*u*t*t*curve[2][0]+t**3*curve[3][0],u**3*curve[0][1]+3*u*u*t*curve[1][1]+3*u*t*t*curve[2][1]+t**3*curve[3][1]],tangent=[3*(u*u*(curve[1][0]-curve[0][0])+2*u*t*(curve[2][0]-curve[1][0])+t*t*(curve[3][0]-curve[2][0])),3*(u*u*(curve[1][1]-curve[0][1])+2*u*t*(curve[2][1]-curve[1][1])+t*t*(curve[3][1]-curve[2][1]))],length=Math.hypot(...tangent)
+    if(!(length>0))continue
+    const nxLeft=-tangent[1]/length,nyLeft=tangent[0]/length
+    for(const factor of [.25,.5,1,2,4]){
+     const offset=baseOffset*factor,leftValue=sample([midpoint[0]+nxLeft*offset,midpoint[1]+nyLeft*offset]),rightValue=sample([midpoint[0]-nxLeft*offset,midpoint[1]-nyLeft*offset])
+     if(Number.isFinite(leftValue)&&Number.isFinite(rightValue)&&Math.abs(leftValue-rightValue)>1e-10){
+      // The fitted curve can drift slightly from its source level in steep or
+      // singular areas. The local gradient still gives a useful direction
+      // even when both probes happen to fall on the same side of the level.
+      const shouldReverse=leftValue<rightValue
+      if(reverse!==null&&reverse!==shouldReverse){conflict=true;oriented=false;break}
+      reverse=shouldReverse;oriented=true;break
+     }
+    }
+    if(conflict)break
+   }
+   if(oriented&&reverse)curve.reverse()
+   orientations.push(oriented)
+   return curve.flatMap(([x,y])=>[round((x-ax0)/(ax1-ax0)),round((y-ay0)/(ay1-ay0))])
+  })
+  paths.push({step,closed:path.closed,orientations,curves})
  }
  return paths
 }

@@ -1,4 +1,4 @@
-import {ContourAtlasPreparer} from './contour-atlas-preparer.js?v=atlas-builder-v4'
+import {ContourAtlasPreparer} from './contour-atlas-preparer.js?v=oriented-cache-v5'
 
 // Owns projection-pair atlas lifecycles and announces each usable snapshot to
 // the tile-plan worker. It also fixes band-to-source zoom mappings per target

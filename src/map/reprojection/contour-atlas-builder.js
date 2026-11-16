@@ -1,5 +1,5 @@
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
-import {buildAdaptiveContourPaths,createAdaptiveContourWorkspace} from './adaptive-contours.js?v=atlas-fast-v10'
+import {buildAdaptiveContourPaths,createAdaptiveContourWorkspace} from './adaptive-contours.js?v=atlas-oriented-v11'
 
 // A projection-pair atlas owns its initial global approximation and the state
 // needed for progressively finer global subdivision passes.
@@ -29,7 +29,7 @@ export class ContourAtlas {
   const pass=this.passes[this.nextPass]
   if(!pass)return null
   const paths=this.identity?[]:buildAdaptiveContourPaths({sample:this.sample,extent:this.extent,atlasExtent:this.extent,levels:this.levels,maxDepthX:pass.depth,maxDepthY:pass.depth,minimumDepth:pass.minimumDepth??7,curvatureTolerance:pass.curvatureTolerance,workspace:this.workspace,reuseSamples})
-  this.data={version:2,target:this.target.getCode(),source:this.source.getCode(),coordinateProjection:this.coordinateProjection.getCode(),extent:this.extent,steps:this.steps,minStep:this.minZoom*this.steps,maxStep:this.maxZoom*this.steps,paths}
+  this.data={version:3,orientation:'high-left',target:this.target.getCode(),source:this.source.getCode(),coordinateProjection:this.coordinateProjection.getCode(),extent:this.extent,steps:this.steps,minStep:this.minZoom*this.steps,maxStep:this.maxZoom*this.steps,paths}
   this.stage=pass.stage;this.nextPass++
   if(this.nextPass>=this.passes.length){this.complete=true;this.releaseIntermediateState()}
   return {stage:this.stage,atlas:this.data,done:this.complete}
