@@ -1,12 +1,13 @@
 // Runtime curve index shared by the UI thread and the plan worker. This file
 // has no projection-library imports so it can load in a module worker.
-export class ContourAtlas {
+export class ContourAtlasIndex {
  constructor(data,{indexSize=32}={}){
-  if(data.version!==1||!Array.isArray(data.extent)||!Array.isArray(data.paths))throw Error('Invalid contour atlas')
+  if(![1,2].includes(data.version)||!Array.isArray(data.extent)||!Array.isArray(data.paths))throw Error('Invalid contour atlas')
   this.data=data;this.indexSize=indexSize;this.cells=new Map();this.segments=[]
   for(const path of data.paths)for(const curve of path.curves){
    const xs=[curve[0],curve[2],curve[4],curve[6]],ys=[curve[1],curve[3],curve[5],curve[7]]
-   const segment={quarter:path.quarter,curve,bounds:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]},id=this.segments.push(segment)-1
+   const step=path.step??(data.steps?path.quarter:(path.quarter??0)/4),level=step/(data.steps||1)
+   const segment={step,level,curve,bounds:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]},id=this.segments.push(segment)-1
    const [x0,y0,x1,y1]=this.cellRange(segment.bounds)
    for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
     const key=y*indexSize+x;if(!this.cells.has(key))this.cells.set(key,[]);this.cells.get(key).push(id)
@@ -23,3 +24,5 @@ export class ContourAtlas {
   return result
  }
 }
+
+export {ContourAtlasIndex as ContourAtlas}

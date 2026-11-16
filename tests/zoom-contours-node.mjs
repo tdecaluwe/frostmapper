@@ -29,10 +29,11 @@ for(const z of [6,8,10]){
   if(!spans){skipped++;continue}
   for(let py=2;py<256;py+=4)for(let px=2;px<256;px+=4){
    const q=distortion([e[0]+(px+.5)*size/256,e[3]-(py+.5)*size/256])
-   if(q===null||Math.abs(q-Math.round(q))<.2)continue
+   const steps=data.steps||1
+   if(q===null||Math.abs(q*steps-Math.round(q*steps))<.2)continue
    const span=spans.find(s=>s.y===py&&s.x<=px&&s.x+s.width>px)
    if(!span)continue
-   checked++;if(span.band!==Math.floor(q))wrong++
+   checked++;if(span.band!==Math.floor(q*steps))wrong++
   }
  }
  results.push({sourceZoom:z,checked,wrong,skipped})

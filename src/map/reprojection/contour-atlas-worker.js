@@ -1,8 +1,6 @@
-import {get,PROJECTION_STRINGS,TRIPTYCHIAL_CODE} from '../projections/worker-index.js'
-import {ContourAtlasBuilder} from './contour-atlas.js?v=atlas-fast-v2'
+import {get,PROJECTION_STRINGS} from '../projections/worker-index.js'
 import {MAX_SOURCE_ZOOM} from './contour-atlas-config.js'
-import {buildTriptychialSourceBaseAtlas,refineTriptychialSourceAtlasPasses,refineTriptychialTargetAtlas} from '../../../tools/refine-source-atlas.js?v=atlas-fast-v3'
-import {createAdaptiveContourWorkspace} from './adaptive-contours.js?v=atlas-fast-v3'
+import {ContourAtlas} from './contour-atlas-builder.js?v=atlas-builder-v3'
 
 self.addEventListener('message',event=>{
  const message=event.data
@@ -10,38 +8,35 @@ self.addEventListener('message',event=>{
 })
 
 async function build(message){
+ let atlas
  try{
   const expected=PROJECTION_STRINGS[message.targetCode]
-  if(!expected||expected!==message.targetDefinition||message.sourceDefinition!==PROJECTION_STRINGS['EPSG:3857'])throw Error('Projection definition changed while preparing the atlas')
-  const target=get(message.targetCode),source=get('EPSG:3857'),coordinateProjection=message.coordinateProjection==='source'?source:target
-  const triptychialSource=message.targetCode===TRIPTYCHIAL_CODE&&message.coordinateProjection==='source'
-  const workspace=triptychialSource?createAdaptiveContourWorkspace(9,9):null
-  const options={coordinateProjection,maxQuarter:MAX_SOURCE_ZOOM*4}
-  if(message.coordinateProjection==='source')Object.assign(options,{width:1025,height:1025})
-  let data
-  if(triptychialSource)data=buildTriptychialSourceBaseAtlas(target,source,{maxQuarter:MAX_SOURCE_ZOOM*4,workspace})
-  else data=new ContourAtlasBuilder(target,source,options).build()
+  const expectedSource=PROJECTION_STRINGS[message.sourceCode]
+  if(!expected||expected!==message.targetDefinition||!expectedSource||message.sourceDefinition!==expectedSource)throw Error('Projection definition changed while preparing the atlas')
+  const target=get(message.targetCode),source=get(message.sourceCode),coordinateProjection=message.coordinateProjection==='source'?source:target
+  const highestSourceZoom=message.highestSourceZoom||MAX_SOURCE_ZOOM
+  const options={coordinateProjection,steps:message.steps||4,minZoom:-highestSourceZoom,maxZoom:highestSourceZoom}
   const metadata=atlas=>{
    atlas.targetDefinition=message.targetDefinition
    atlas.sourceDefinition=message.sourceDefinition
-   atlas.highestSourceZoom=MAX_SOURCE_ZOOM
+   atlas.highestSourceZoom=highestSourceZoom
    return atlas
   }
   const publish=(type,stage,atlas)=>self.postMessage({type,stage,id:message.id,data:metadata(atlas)})
-  if(triptychialSource){
-   publish('update','global-base',data)
+  atlas=new ContourAtlas(target,source,options)
+  let data=atlas.data
+  publish('update',atlas.stage,data)
+  while(!atlas.complete){
    await yieldWorker()
-   for(const pass of refineTriptychialSourceAtlasPasses(data,{workspace})){
-    publish('update',pass.stage,pass.atlas)
-    await yieldWorker()
-   }
-  }else if(message.targetCode===TRIPTYCHIAL_CODE){
-   data=refineTriptychialTargetAtlas(data,{maxQuarter:MAX_SOURCE_ZOOM*4})
+   const pass=atlas.refineBlock();data=pass.atlas
+   publish('update',pass.stage,data)
   }
   metadata(data)
   const json=JSON.stringify(data)
+  atlas.dispose()
   self.postMessage({type:'ready',id:message.id,data,json})
  }catch(error){
+  atlas?.dispose()
   self.postMessage({type:'error',id:message.id,error:String(error?.stack||error)})
  }
 }

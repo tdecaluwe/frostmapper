@@ -1,5 +1,5 @@
-import {ContourAtlas} from './contour-atlas-index.js'
-import {BandMaskPlanner} from './band-mask.js?v=incremental-mask'
+import {ContourAtlas} from './contour-atlas-index.js?v=steps-v2'
+import {BandMaskPlanner} from './band-mask.js?v=steps-v2'
 
 const atlases=new Map(),planner=new BandMaskPlanner()
 self.addEventListener('message',event=>{
@@ -15,7 +15,7 @@ self.addEventListener('message',event=>{
 async function runPlan(message){
  try{
   const atlas=atlases.get(message.atlas)
-  const chunks=atlas?planner.planChunks(atlas,message.extent,message.width,message.height,message.anchor,{minimumQuarter:message.minimumQuarter}):[{failed:true}]
+  const chunks=atlas?planner.planChunks(atlas,message.extent,message.width,message.height,message.anchor,{minimumStep:message.minimumStep}):[{failed:true}]
   for(const chunk of chunks){
    if(chunk.failed){
     if(message.depth<4)self.postMessage({type:'split',key:message.key})

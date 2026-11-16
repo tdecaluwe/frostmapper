@@ -1,8 +1,8 @@
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
 import {traceContoursMulti} from './contour-trace.js?v=atlas-fast-v2'
 import {fitContour} from './curve-fit.js'
-import {ContourAtlas} from './contour-atlas-index.js'
-export {ContourAtlas} from './contour-atlas-index.js'
+import {ContourAtlas} from './contour-atlas-index.js?v=steps-v2'
+export {ContourAtlas} from './contour-atlas-index.js?v=steps-v2'
 
 // Builds projection-pair contour data. Coordinates are normalized to
 // the projection extent, independent of zoom and viewport dimensions.

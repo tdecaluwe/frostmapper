@@ -43,13 +43,13 @@ function planWithSplits(atlas,request,makeChildren,depth=0){
  return Int32Array.from(packed)
 }
 const read=name=>JSON.parse(require('fs').readFileSync(name==='source-frost-triptychial.json'&&process.env.FROSTMAPPER_ATLAS?process.env.FROSTMAPPER_ATLAS:new URL(`./fixtures/contours/${name}`,import.meta.url),'utf8'))
-manager.sourceAtlases.set(target.getCode(),new ContourAtlas(read('source-frost-triptychial.json')))
-manager.planWorker={revision:0,register(){},peek(){return null},enqueue(id,key,makeRequest,source,makeChildren){const request=makeRequest(),atlas=manager.sourceAtlases.get(target.getCode());return {ready:true,complete:true,spans:planWithSplits(atlas,request,makeChildren)}}}
+manager.zoomSupervisor.register(target.getCode(),'EPSG:3857','source').data=read('source-frost-triptychial.json')
+manager.planWorker={revision:0,register(){},peek(){return null},enqueue(id,key,makeRequest,source,makeChildren){const request=makeRequest(),atlas=manager.zoomSupervisor.getAtlas(target.getCode(),'EPSG:3857','source');return {ready:true,complete:true,spans:planWithSplits(new ContourAtlas(atlas),request,makeChildren)}}}
 manager.addSource(source)
 const assembler=manager.assemblers.get(source),assemble=assembler.getTile.bind(assembler),sourceTiles=[]
 assembler.getTile=function(z,x,y,pixelRatio,projection,options){
  const extent=sourceGrid.getTileCoordExtent([z,x,y])
- sourceTiles.push({extent,reference:options.reference,minimumZoom:options.minimumZoom,maximumZoom:options.maximumZoom})
+ sourceTiles.push({extent,reference:options.reference,minimumZoom:options.minimumZoom,maximumZoom:options.maximumZoom,spans:options.spans,anchor:manager.field(target,src).atSource([(extent[0]+extent[2])/2,(extent[1]+extent[3])/2])})
  return assemble(z,x,y,pixelRatio,projection,options)
 }
 activeProjection=target;manager.setSignature(target.getCode())
@@ -75,7 +75,7 @@ for(const coord of [[5,7,0],[5,8,0],[5,7,1],[5,8,1]]){
   let actual=-1,error=Infinity
   for(let z=0;z<colors.length;z++){const diff=colors[z].reduce((sum,value,i)=>sum+(value-rgb[i])**2,0);if(diff<error){error=diff;actual=z}}
   if(error>100){unreadable++;continue}
-  checked++;if(actual!==expected){wrong++;const key=`${expected}→${actual}`;transitions[key]=(transitions[key]||0)+1;bounds[0]=Math.min(bounds[0],x);bounds[1]=Math.min(bounds[1],y);bounds[2]=Math.max(bounds[2],x);bounds[3]=Math.max(bounds[3],y);if(examples.length<1){const sx=(sourceCoordinate[0]-bandSource.extent[0])/(bandSource.extent[2]-bandSource.extent[0])*256,sy=(bandSource.extent[3]-sourceCoordinate[1])/(bandSource.extent[3]-bandSource.extent[1])*256,mask=bandSource.tile.spans,maskRows=[];if(ArrayBuffer.isView(mask))for(let i=0;i<mask.length;i+=4)if(mask[i+1]===Math.floor(sy))maskRows.push([mask[i],mask[i+2],mask[i+3]]);examples.push({pixel:[x,y],expected,actual,distortion:+q.toFixed(3),sourceCoord:sourceCoordinate.map(v=>+v.toFixed(1)),sourcePixel:[+sx.toFixed(2),+sy.toFixed(2)],sourcePlan:[bandSource.minimumZoom,bandSource.maximumZoom],reference:bandSource.reference,rawSpans:ArrayBuffer.isView(bandSource.spans)?Array.from(bandSource.spans):bandSource.spans.slice(0,2),maskType:Object.prototype.toString.call(mask),maskLength:mask?.length,maskRows,state:bandSource.tile.getState(),parents:[...(bandSource.tile.parents?.values()||[])].map(p=>[p.zoom,p.tile.getState()])})}}
+  checked++;if(actual!==expected){wrong++;const key=`${expected}→${actual}`;transitions[key]=(transitions[key]||0)+1;bounds[0]=Math.min(bounds[0],x);bounds[1]=Math.min(bounds[1],y);bounds[2]=Math.max(bounds[2],x);bounds[3]=Math.max(bounds[3],y);if(examples.length<1){const sx=(sourceCoordinate[0]-bandSource.extent[0])/(bandSource.extent[2]-bandSource.extent[0])*256,sy=(bandSource.extent[3]-sourceCoordinate[1])/(bandSource.extent[3]-bandSource.extent[1])*256,mask=bandSource.spans,maskRows=[];if(ArrayBuffer.isView(mask))for(let i=0;i<mask.length;i+=4)if(mask[i+1]===Math.floor(sy))maskRows.push([mask[i],mask[i+2],mask[i+3]]);examples.push({pixel:[x,y],expected,actual,distortion:+q.toFixed(3),sourceCoord:sourceCoordinate.map(v=>+v.toFixed(1)),sourcePixel:[+sx.toFixed(2),+sy.toFixed(2)],sourceExtent:bandSource.extent,anchor:bandSource.anchor,sourcePlan:[bandSource.minimumZoom,bandSource.maximumZoom],reference:bandSource.reference,rawSpans:ArrayBuffer.isView(mask)?Array.from(mask):mask.slice(0,2),maskLength:mask?.length,maskRows})}}
  }
  results.push({coord,sourceZoom:tile.sourceZ_,reference,checked,wrong,unreadable,wrongBounds:wrong?bounds:null,transitions,examples});tile.release()
 }

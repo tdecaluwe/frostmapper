@@ -7,12 +7,12 @@ import {createMapView} from './map/projections/view.js?v=viewport-model'
 import {ProjectionViewport,ProjectionUnavailableError} from './map/projections/viewport.js'
 import {CanonicalZoom} from './map/projections/canonical-zoom.js'
 import {ZoomBandSource} from './map/reprojection/zoom-band-source.js?v=source-loads'
-import {ContourReprojection} from './map/reprojection/contour-reprojection.js?v=worker-plans-r8'
+import {ContourReprojection} from './map/reprojection/contour-reprojection.js?v=supervisor-v3'
 const baseSource=new (ZoomBandSource(XYZ))({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})
 const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({preload:2,cacheSize:16384,source:baseSource})],view:createMapView('EPSG:3857',[10,50],4)})
-const contourReprojection=new ContourReprojection(map)
+const contourReprojection=new ContourReprojection(map,{steps:4})
 baseSource.configureZoomBands(contourReprojection)
-if(new URL(location.href).searchParams.get('debugBands')==='1')import('./map/reprojection/debug-overlay.js?v=fixed-bands').then(({ContourDebugOverlay})=>new ContourDebugOverlay(map,contourReprojection))
+if(new URL(location.href).searchParams.get('debugBands')==='1')import('./map/reprojection/debug-overlay.js?v=steps-v1').then(({ContourDebugOverlay})=>new ContourDebugOverlay(map,contourReprojection))
 import {readState,syncUrl} from './map/state/url.js?v=contour-bands'
 function applyState(s){const code=['EPSG:3857','EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL'].includes(s.projection)?s.projection:'EPSG:3857';map.setView(CanonicalZoom.createView(code,s.center,s.zoom,s.rotation,map.getSize()));document.querySelector('#projection').value=code}
 const initial=readState(); if(initial) applyState(initial)
@@ -29,6 +29,7 @@ nationalLayer(map,{name:'Norway',border:'no',source:norway,contourReprojection})
 document.querySelector('#projection').addEventListener('change',event=>{
  const selector=event.target,status=document.querySelector('#projection-status'),previous=map.getView().getProjection().getCode()
  try{
+  contourReprojection.zoomSupervisor.anticipateProjectionTranslation(selector.value,'EPSG:3857','source').catch(()=>{})
   const next=ProjectionViewport.fromMap(map).switchTo(selector.value)
   map.setView(next.view);status.hidden=true;status.textContent=''
  }catch(error){

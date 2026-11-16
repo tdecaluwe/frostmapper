@@ -1,14 +1,9 @@
 import '../src/map/projections/index.js?v=grieger-wrap'
 import {get} from 'ol/proj.js'
-import {ContourAtlasBuilder} from '../src/map/reprojection/contour-atlas.js?v=fixed-bands'
-import {refineTriptychialSourceAtlas,refineTriptychialTargetAtlas} from './refine-source-atlas.js'
+import {buildAdaptiveContourAtlas} from '../src/map/reprojection/contour-atlas-builder.js?v=atlas-builder-v3'
 window.generateContourAtlas=(code,coordinates)=>{
  const target=get(code),source=get('EPSG:3857'),coordinateProjection=coordinates==='source'?source:target
- const options=coordinates==='source'?{coordinateProjection,width:1025,height:1025}:{coordinateProjection}
- const data=new ContourAtlasBuilder(target,source,options).build()
- if(code==='FROST:TRIPTYCHIAL'&&coordinates==='source')return refineTriptychialSourceAtlas(data)
- if(code==='FROST:TRIPTYCHIAL'&&coordinates==='target')return refineTriptychialTargetAtlas(data)
- return data
+ return buildAdaptiveContourAtlas(target,source,{coordinateProjection,minQuarter:-80,maxQuarter:80})
 }
 document.querySelector('#generate').addEventListener('click',()=>{
  const code=document.querySelector('#projection').value,coordinates=document.querySelector('#coordinates').value,status=document.querySelector('#status')

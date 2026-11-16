@@ -12,12 +12,12 @@ export class ContourDebugOverlay{
   const ratio=window.devicePixelRatio||1,width=Math.round(size[0]*ratio),height=Math.round(size[1]*ratio)
   if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height}
   const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,...size)
-  const atlas=reprojection.sourceAtlases.get(reprojection.signature)
+  const atlas=reprojection.zoomSupervisor.getAtlas(reprojection.signature,'EPSG:3857','source')
   if(!atlas?.paths)return
   const projection=map.getView().getProjection(),domain=atlas.extent
   ctx.lineWidth=2
-  for(const {curves,quarter} of atlas.paths){
-   ctx.strokeStyle=quarter%8===0?'#ff1758':'#00b6ff'
+  for(const {curves,step,quarter} of atlas.paths){
+   ctx.strokeStyle=((step??quarter/4)%(atlas.steps||1))===0?'#ff1758':'#00b6ff'
    for(const curve of curves){
     ctx.beginPath();let started=false
     for(let step=0;step<=24;step++){
