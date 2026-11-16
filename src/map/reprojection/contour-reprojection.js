@@ -1,23 +1,15 @@
 import {equivalent} from 'ol/proj.js'
 import {wrapAndSliceX} from 'ol/extent.js'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
-import {ContourPlanClient} from './contour-plan-client.js?v=incremental-mask'
-import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r6'
-import {ZoomLevelSupervisor} from './zoom-level-supervisor.js?v=supervisor-v3'
+import {ContourPlanClient} from './contour-plan-client.js?v=incremental-mask-v2'
+import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r7'
+import {ZoomLevelSupervisor} from './zoom-level-supervisor.js?v=supervisor-v5'
 
 function eachSpan(spans,callback){
- if(ArrayBuffer.isView(spans)){for(let i=0;i<spans.length;i+=4)callback({x:spans[i],y:spans[i+1],width:spans[i+2],band:spans[i+3]});return}
- for(const span of spans)callback(span)
+ if(ArrayBuffer.isView(spans)){for(let i=0;i<spans.length;i+=4)callback(spans[i],spans[i+1],spans[i+2],spans[i+3]);return}
+ for(const span of spans)callback(span.x,span.y,span.width,span.band)
 }
-function tileAnchor(extent,width,height,distortionAt){
- const samples=[[.5,.5],[.25,.5],[.75,.5],[.5,.25],[.5,.75],[.25,.25],[.75,.25],[.25,.75],[.75,.75]]
- for(const [fx,fy] of samples){
-  const point=[extent[0]+fx*(extent[2]-extent[0]),extent[3]-fy*(extent[3]-extent[1])],value=distortionAt(point)
-  if(Number.isFinite(value))return {value,x:fx*width,y:fy*height}
- }
- return null
-}
-function splitTile(extent,width,height,anchorAt,minimumStep){
+function splitTile(extent,width,height,minimumStep){
  const midX=(extent[0]+extent[2])/2,midY=(extent[1]+extent[3])/2,midPixelX=Math.floor(width/2),midPixelY=Math.floor(height/2)
  const parts=[
   {extent:[extent[0],midY,midX,extent[3]],width:midPixelX,height:midPixelY,offset:[0,0]},
@@ -27,8 +19,8 @@ function splitTile(extent,width,height,anchorAt,minimumStep){
  ]
  return parts.map(part=>({
   offset:part.offset,
-  request:{extent:part.extent,width:part.width,height:part.height,anchor:anchorAt(part.extent,part.width,part.height),minimumStep},
-  makeChildren:()=>splitTile(part.extent,part.width,part.height,anchorAt,minimumStep)
+  request:{extent:part.extent,width:part.width,height:part.height,minimumStep},
+  makeChildren:()=>splitTile(part.extent,part.width,part.height,minimumStep)
  }))
 }
 
@@ -57,27 +49,28 @@ export class ContourReprojection {
   if(this.zoomSupervisor.getAtlas(code,source.getProjection().getCode(),'source'))this.setSignature(code)
   else this.setSignature('none')
  }
- sourcePlan(source,code,key,extent,width,height,minimumStep,field){
+ sourcePlan(source,code,key,extent,width,height,minimumStep){
   const sourceCode=source.getProjection().getCode(),id=this.zoomSupervisor.atlasId(code,sourceCode,'source'),versionedKey=`${key}|atlas:${this.zoomSupervisor.getRevision(code,sourceCode,'source')}`,cached=this.planWorker.peek(id,versionedKey)
   if(cached)return cached
-  const anchorAt=(tileExtent,tileWidth,tileHeight)=>tileAnchor(tileExtent,tileWidth,tileHeight,point=>field.atSource(point))
-  return this.planWorker.enqueue(id,versionedKey,()=>({extent,width,height,anchor:anchorAt(extent,width,height),minimumStep}),source,()=>splitTile(extent,width,height,anchorAt,minimumStep))
+  return this.planWorker.enqueue(id,versionedKey,()=>({extent,width,height,minimumStep}),source,()=>splitTile(extent,width,height,minimumStep))
  }
- footprintPlan(source,code,z,coord,sourceExtent,reference,minimumStep,field,steps){
+ footprintPlan(source,code,z,coord,sourceExtent,reference,minimumStep,steps){
   const sourceProjection=source.getProjection(),parts=wrapAndSliceX(sourceExtent.slice(),sourceProjection,true)
   if(!parts.length)return null
   const sourceGrid=source.getTileGridForProjection(sourceProjection),width=256,height=256
   let lowest=sourceGrid.getMaxZoom(),highest=sourceGrid.getMinZoom()
   const plans=parts.map((extent,part)=>{
    const extentKey=extent.map(value=>Math.round(value*1000)).join(','),key=`footprint/${z}/${coord[1]}/${coord[2]}/${width}x${height}/s${minimumStep}/${part}/${extentKey}`
-   return this.sourcePlan(source,code,key,extent,width,height,minimumStep,field)
+   return this.sourcePlan(source,code,key,extent,width,height,minimumStep)
   })
   if(plans.some(planned=>!planned?.ready||!planned.complete||!planned.spans))return null
   for(const planned of plans){
-   eachSpan(planned.spans,span=>{
-    const desired=this.zoomSupervisor.sourceZoomForBand(code,source.getProjection().getCode(),z,reference,span.band,sourceGrid.getMinZoom(),sourceGrid.getMaxZoom(),steps)
-    lowest=Math.min(lowest,desired);highest=Math.max(highest,desired)
-   })
+   let minBand=Infinity,maxBand=-Infinity
+   eachSpan(planned.spans,(_x,_y,_width,band)=>{minBand=Math.min(minBand,band);maxBand=Math.max(maxBand,band)})
+   if(minBand!==Infinity){
+    const bounds=this.zoomSupervisor.sourceZoomBoundsForBands(code,sourceProjection.getCode(),z,reference,minBand,maxBand,sourceGrid.getMinZoom(),sourceGrid.getMaxZoom(),steps)
+    lowest=Math.min(lowest,bounds.minimum);highest=Math.max(highest,bounds.maximum)
+   }
   }
   return {lowest,highest,requested:Math.min(sourceGrid.getMaxZoom(),lowest+(highest>lowest?1:0)),maximumZoom:Math.min(highest,lowest+2)}
  }
@@ -95,13 +88,13 @@ export class ContourReprojection {
   source.getTile=function(z,x,y,pixelRatio,target){
    const src=this.getProjection(),atlas=target&&manager.zoomSupervisor.getAtlas(target.getCode(),src?.getCode(),'source')
    if(!atlas||!src||equivalent(src,target))return original.call(this,z,x,y,pixelRatio,target)
-   const sourceGrid=this.getTileGridForProjection(src),targetGrid=this.getTileGridForProjection(target),field=manager.field(target,src)
+   const sourceGrid=this.getTileGridForProjection(src),targetGrid=this.getTileGridForProjection(target)
    const coord=this.getTileCoordForTileUrlFunction([z,x,y],target)
    if(!coord)return original.call(this,z,x,y,pixelRatio,target)
    const reference=Math.round(Math.log2(sourceGrid.getResolution(0)/targetGrid.getResolution(z)))
-   const steps=atlas.steps||1,minimumStep=(reference-sourceGrid.getMaxZoom())*steps,selection={}
+   const steps=atlas.steps||1,minimumStep=(reference-sourceGrid.getMaxZoom())*steps,selection={},zoomLookup=manager.zoomSupervisor.sourceZoomLookup(target.getCode(),src.getCode(),z,reference,sourceGrid.getMinZoom(),sourceGrid.getMaxZoom(),atlas.minStep??atlas.minQuarter??-80,atlas.maxStep??atlas.maxQuarter??80,steps)
    const selectZoom=sourceExtent=>{
-    const result=manager.footprintPlan(this,target.getCode(),z,coord,sourceExtent,reference,minimumStep,field,steps)
+   const result=manager.footprintPlan(this,target.getCode(),z,coord,sourceExtent,reference,minimumStep,steps)
     if(!result)return undefined
     Object.assign(selection,result);return result.requested
    }
@@ -111,9 +104,9 @@ export class ContourReprojection {
     const sourceCoord=this.getTileCoordForTileUrlFunction([sourceZ,sourceX,sourceY],projection)
     if(!sourceCoord)return originalInternal.call(this,sourceZ,sourceX,sourceY,ratio,projection)
     const sourceExtent=sourceGrid.getTileCoordExtent(sourceCoord),sourceSize=sourceGrid.getTileSize(sourceZ),sourceWidth=typeof sourceSize==='number'?sourceSize:sourceSize[0],sourceHeight=typeof sourceSize==='number'?sourceSize:sourceSize[1],maximumZoom=selection.maximumZoom,sourceMinimumStep=(reference-maximumZoom)*steps,sourceKey=`${sourceZ}/${sourceCoord[1]}/${sourceCoord[2]}/${sourceWidth}/${sourceHeight}/s${sourceMinimumStep}`
-    const sourcePlan=manager.sourcePlan(this,target.getCode(),sourceKey,sourceExtent,sourceWidth,sourceHeight,sourceMinimumStep,field)
+    const sourcePlan=manager.sourcePlan(this,target.getCode(),sourceKey,sourceExtent,sourceWidth,sourceHeight,sourceMinimumStep)
     if(!sourcePlan.ready||!sourcePlan.spans)return originalInternal.call(this,sourceZ,sourceX,sourceY,ratio,projection)
-    return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{spans:sourcePlan.spans,reference,steps,minimumZoom:selection.lowest,maximumZoom,original:originalInternal,cacheKey:this.getKey()})
+    return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{spans:sourcePlan.spans,reference,steps,zoomLookup,minimumZoom:selection.lowest,maximumZoom,original:originalInternal,cacheKey:this.getKey()})
    }
    try{return this.getTileAtSourceZoom(z,x,y,pixelRatio,target,undefined,undefined,undefined,selectZoom)}finally{if(own)this.getTileInternal=originalInternal;else delete this.getTileInternal}
   }

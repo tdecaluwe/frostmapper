@@ -1,7 +1,7 @@
 // Produce per-row spans from the shared vector contours. Every span refers to
 // a distortion band; clipping and reprojection are the renderer's job.
 export class BandMaskPlanner {
- constructor({maxDepth=16,curveError=.2,rowsPerChunk=16}={}){this.maxDepth=maxDepth;this.curveError=curveError;this.rowsPerChunk=rowsPerChunk}
+ constructor({maxDepth=16,curveError=.2,rowsPerChunk=64}={}){this.maxDepth=maxDepth;this.curveError=curveError;this.rowsPerChunk=rowsPerChunk}
  uniform(width,height,band,start=0){return Array.from({length:height},(_,index)=>({x:0,y:start+index,width,height:1,band}))}
  plan(atlas,extent,width,height,anchorValue,options={}){
   const spans=[]
@@ -35,16 +35,23 @@ export class BandMaskPlanner {
    flatten(a,ab,abc,m,step,depth+1);flatten(m,bcd,cd,d,step,depth+1)
   }
   for(const {curve,step} of candidates)flatten(screen(curve[0],curve[1]),screen(curve[2],curve[3]),screen(curve[4],curve[5]),screen(curve[6],curve[7]),step,0)
-  const crossings=(axis,value)=>{
-   const other=1-axis,result=[]
+  const anchorX=anchor.x,anchorY=anchor.y,rowCrossings=Array.from({length:height},()=>[]),vertical=[]
+  const crossesAt=(a,d,axis,value)=>(a[axis]<=value&&value<d[axis])||(d[axis]<=value&&value<a[axis])
+  const intersect=(a,d,axis,value)=>a[1-axis]+(value-a[axis])/(d[axis]-a[axis])*(d[1-axis]-a[1-axis])
   for(const {a,d,step} of lines){
-    // A half-open rule prevents double-counting shared contour vertices.
-    if(!((a[axis]<=value&&value<d[axis])||(d[axis]<=value&&value<a[axis])))continue
-    const coordinate=a[other]+(value-a[axis])/(d[axis]-a[axis])*(d[other]-a[other])
-    result.push({coordinate,step})
+   // Build the anchor column and screen-row crossing lists in one pass.
+   if(crossesAt(a,d,0,anchorX))vertical.push({coordinate:intersect(a,d,0,anchorX),step})
+   const first=Math.max(0,Math.ceil(Math.min(a[1],d[1])-.5)),end=Math.min(height,Math.ceil(Math.max(a[1],d[1])-.5))
+   for(let row=first;row<end;row++){
+    const y=row+.5
+    if(!crossesAt(a,d,1,y))continue
+    const coordinate=intersect(a,d,1,y)
+    if(coordinate>=0&&coordinate<width)rowCrossings[row].push({coordinate,step})
    }
-   return result.sort((a,b)=>a.coordinate-b.coordinate)
   }
+  vertical.sort((a,b)=>a.coordinate-b.coordinate)
+  for(const row of rowCrossings)row.sort((a,b)=>a.coordinate-b.coordinate)
+  const lowerBound=(items,value)=>{let low=0,high=items.length;while(low<high){const middle=(low+high)>>1;if(items[middle].coordinate<value)low=middle+1;else high=middle}return low}
   const cross=(band,step)=>{
    const high=step
    if(band===high)return high-1
@@ -54,21 +61,21 @@ export class BandMaskPlanner {
    // the whole tile plan.
    return band<high-1?high:high-1
   }
-  const anchorX=anchor.x,anchorY=anchor.y,anchorBand=uniformBand,vertical=crossings(0,anchorX)
+  const anchorBand=uniformBand,anchorVerticalStart=lowerBound(vertical,anchorY)
   for(let chunkStart=0;chunkStart<height;chunkStart+=rowsPerChunk){
    const spans=[],chunkEnd=Math.min(height,chunkStart+rowsPerChunk)
    for(let row=chunkStart;row<chunkEnd;row++){
     const y=row+.5;let band=anchorBand
-    const changes=vertical.filter(c=>c.coordinate>=Math.min(anchorY,y)&&c.coordinate<Math.max(anchorY,y))
-    if(y<anchorY)changes.reverse()
-    for(const c of changes){band=cross(band,c.step);if(band===null){yield {failed:true};return}}
-    const horizontal=crossings(1,y).filter(c=>c.coordinate>=0&&c.coordinate<width),leftChanges=horizontal.filter(c=>c.coordinate<anchorX).reverse()
-    for(const c of leftChanges){band=cross(band,c.step);if(band===null){yield {failed:true};return}}
+    const horizontal=rowCrossings[row]
+    if(y<anchorY){const start=lowerBound(vertical,y);for(let i=anchorVerticalStart-1;i>=start;i--){const c=vertical[i];band=cross(band,c.step);if(band===null){yield {failed:true};return}}}
+    else{const end=lowerBound(vertical,y);for(let i=anchorVerticalStart;i<end;i++){const c=vertical[i];band=cross(band,c.step);if(band===null){yield {failed:true};return}}}
+    const leftEnd=lowerBound(horizontal,anchorX)
+    for(let i=leftEnd-1;i>=0;i--){const c=horizontal[i];band=cross(band,c.step);if(band===null){yield {failed:true};return}}
     let start=0
     for(const c of horizontal){
      const end=Math.max(0,Math.min(width,Math.ceil(c.coordinate-.5)))
      if(end>start)spans.push({y:row,x:start,width:end-start,band})
-     if(c.coordinate>=0&&c.coordinate<width){band=cross(band,c.step);if(band===null){yield {failed:true};return}}
+     band=cross(band,c.step);if(band===null){yield {failed:true};return}
      start=Math.max(start,end)
     }
     if(start<width)spans.push({y:row,x:start,width:width-start,band})

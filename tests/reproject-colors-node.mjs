@@ -30,8 +30,13 @@ const target=get('FROST:TRIPTYCHIAL'),src=get('EPSG:3857')
 let activeProjection=get('EPSG:3857')
 const manager=new ContourReprojection({on(){},getView(){return {getProjection:()=>activeProjection}}})
 const directPlanner=new BandMaskPlanner()
+function anchorFor(extent,width,height){
+ const samples=[[.5,.5],[.25,.5],[.75,.5],[.5,.25],[.5,.75],[.25,.25],[.75,.25],[.25,.75],[.75,.75]],distortionAt=point=>manager.field(target,src).atSource(point)
+ for(const [fx,fy] of samples){const value=distortionAt([extent[0]+fx*(extent[2]-extent[0]),extent[3]-fy*(extent[3]-extent[1])]);if(Number.isFinite(value))return {value,x:fx*width,y:fy*height}}
+ return null
+}
 function planWithSplits(atlas,request,makeChildren,depth=0){
- const spans=directPlanner.plan(atlas,request.extent,request.width,request.height,request.anchor,{minimumQuarter:request.minimumQuarter})
+ const anchor=request.anchor||anchorFor(request.extent,request.width,request.height),spans=directPlanner.plan(atlas,request.extent,request.width,request.height,anchor,{minimumStep:request.minimumStep})
  if(spans||depth>=4||!makeChildren)return spans
  const packed=[]
  for(const child of makeChildren()){
@@ -65,12 +70,12 @@ for(const coord of [[5,7,0],[5,8,0],[5,7,1],[5,8,1]]){
  let checked=0,wrong=0,unreadable=0;const examples=[],transitions={},bounds=[Infinity,Infinity,-Infinity,-Infinity]
  for(let y=2;y<canvas.height;y+=4)for(let x=2;x<canvas.width;x+=4){
   const q=field.at([extent[0]+(x+.5)/canvas.width*(extent[2]-extent[0]),extent[3]-(y+.5)/canvas.height*(extent[3]-extent[1])])
-  if(q===null||Math.abs(q-Math.round(q))<.1)continue
+  if(q===null||Math.abs((q-Math.floor(q))-.5)<.1)continue
   const targetCoordinate=[extent[0]+(x+.5)/canvas.width*(extent[2]-extent[0]),extent[3]-(y+.5)/canvas.height*(extent[3]-extent[1])]
   const sourceCoordinate=transform(targetCoordinate,target,src)
   const bandSource=sourceTiles.find(tile=>sourceCoordinate[0]>=tile.extent[0]&&sourceCoordinate[0]<tile.extent[2]&&sourceCoordinate[1]>=tile.extent[1]&&sourceCoordinate[1]<tile.extent[3])
   if(!bandSource){unreadable++;continue}
-  const expected=Math.max(bandSource.minimumZoom,Math.min(bandSource.maximumZoom,reference-Math.floor(q))),index=(y*canvas.width+x)*4,rgb=[pixels[index],pixels[index+1],pixels[index+2]]
+  const expected=Math.max(bandSource.minimumZoom,Math.min(bandSource.maximumZoom,reference-Math.round(q))),index=(y*canvas.width+x)*4,rgb=[pixels[index],pixels[index+1],pixels[index+2]]
   if(pixels[index+3]===0){unreadable++;continue}
   let actual=-1,error=Infinity
   for(let z=0;z<colors.length;z++){const diff=colors[z].reduce((sum,value,i)=>sum+(value-rgb[i])**2,0);if(diff<error){error=diff;actual=z}}

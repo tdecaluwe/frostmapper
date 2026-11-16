@@ -12,7 +12,7 @@ export class ZoomLevelSupervisor {
  atlasId(targetCode,sourceCode,coordinateProjection){return `${targetCode}:${sourceCode}:${coordinateProjection}:steps-${this.steps}`}
  register(targetCode,sourceCode='EPSG:3857',coordinateProjection='source'){
   const key=this.key(targetCode,sourceCode,coordinateProjection)
-  if(!this.entries.has(key))this.entries.set(key,{key,targetCode,sourceCode,coordinateProjection,steps:this.steps,status:'registered',data:null,revision:0,promise:null,anticipated:false,translations:new Map()})
+  if(!this.entries.has(key))this.entries.set(key,{key,targetCode,sourceCode,coordinateProjection,steps:this.steps,status:'registered',data:null,revision:0,promise:null,anticipated:false,translations:new Map(),zoomLookups:new Map()})
   return this.entries.get(key)
  }
  // Signal likely future need before a reprojection tile asks for its mask.
@@ -48,8 +48,22 @@ export class ZoomLevelSupervisor {
   if(!entry.translations.has(key))entry.translations.set(key,reference)
   return entry.translations.get(key)
  }
+ zoomCorrectionForBand(band,steps=this.steps){return Math.round(band/steps)}
  sourceZoomForBand(targetCode,sourceCode,targetZoom,reference,band,minimum,maximum,steps=this.steps){
   const fixedReference=this.referenceFor(targetCode,sourceCode,targetZoom,reference)
-  return Math.max(minimum,Math.min(maximum,fixedReference-Math.floor(band/steps)))
+  return Math.max(minimum,Math.min(maximum,fixedReference-this.zoomCorrectionForBand(band,steps)))
+ }
+ sourceZoomBoundsForBands(targetCode,sourceCode,targetZoom,reference,minBand,maxBand,minimum,maximum,steps=this.steps){
+  const fixedReference=this.referenceFor(targetCode,sourceCode,targetZoom,reference),low=Math.max(minimum,Math.min(maximum,fixedReference-this.zoomCorrectionForBand(maxBand,steps))),high=Math.max(minimum,Math.min(maximum,fixedReference-this.zoomCorrectionForBand(minBand,steps)))
+  return {minimum:Math.min(low,high),maximum:Math.max(low,high)}
+ }
+ sourceZoomLookup(targetCode,sourceCode,targetZoom,reference,minimum,maximum,minBand,maxBand,steps=this.steps){
+  const entry=this.register(targetCode,sourceCode,'source'),fixedReference=this.referenceFor(targetCode,sourceCode,targetZoom,reference),key=[targetZoom,fixedReference,minimum,maximum,minBand,maxBand,steps].join('/');let lookup=entry.zoomLookups.get(key)
+  if(!lookup){
+   const zooms=new Int16Array(maxBand-minBand+1)
+   for(let band=minBand;band<=maxBand;band++)zooms[band-minBand]=Math.max(minimum,Math.min(maximum,fixedReference-this.zoomCorrectionForBand(band,steps)))
+   lookup={minBand,maxBand,zooms};entry.zoomLookups.set(key,lookup)
+  }
+  return lookup
  }
 }

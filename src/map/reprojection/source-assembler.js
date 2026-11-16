@@ -115,7 +115,7 @@ export {AssembledZoomTile as AssembledSourceTile}
 // otherwise unchanged ReprojTile. Both caches are local to one tile source.
 export class SourceTileAssembler {
  constructor(source,{maxParents=128,maxAssembled=64}={}){this.source=source;this.parents=new TilePool(maxParents);this.assembled=new TilePool(maxAssembled)}
- getTile(z,x,y,pixelRatio,projection,{spans,reference,steps=4,minimumZoom=z,maximumZoom=minimumZoom+2,original,cacheKey}){
+ getTile(z,x,y,pixelRatio,projection,{spans,reference,steps=4,zoomForBand=null,zoomLookup=null,minimumZoom=z,maximumZoom=minimumZoom+2,original,cacheKey}){
   const source=this.source,grid=source.getTileGridForProjection(projection),coord=[z,x,y]
   if(source.getGutter()!==0)return original.call(source,z,x,y,pixelRatio,projection)
   const normalized=source.getTileCoordForTileUrlFunction(coord,projection)
@@ -128,7 +128,7 @@ export class SourceTileAssembler {
   return this.assembled.get(key,()=>{
    const min=grid.getMinZoom(),spanCount=ArrayBuffer.isView(spans)?spans.length/4:spans.length,painted=new Int32Array(spanCount*4),counts=new Map()
    let i=0
-   eachBandSpan(spans,(x,y,w,band)=>{const zoom=Math.max(min,minimumZoom,Math.min(grid.getMaxZoom(),maximumZoom,reference-Math.floor(band/steps)));painted[i]=x;painted[i+1]=y;painted[i+2]=w;painted[i+3]=zoom;counts.set(zoom,(counts.get(zoom)||0)+w);i+=4})
+   eachBandSpan(spans,(x,y,w,band)=>{const lookupIndex=band-(zoomLookup?.minBand??0),desired=zoomLookup&&lookupIndex>=0&&lookupIndex<zoomLookup.zooms.length?zoomLookup.zooms[lookupIndex]:zoomForBand?zoomForBand(band):reference-Math.round(band/steps),zoom=Math.max(min,minimumZoom,Math.min(grid.getMaxZoom(),maximumZoom,desired));painted[i]=x;painted[i+1]=y;painted[i+2]=w;painted[i+3]=zoom;counts.set(zoom,(counts.get(zoom)||0)+w);i+=4})
    let levels=[...counts.keys()].sort((a,b)=>a-b)
    if(levels.length>3){
     let best=levels[0],weight=-1

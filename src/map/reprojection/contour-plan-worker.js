@@ -1,11 +1,17 @@
 import {ContourAtlas} from './contour-atlas-index.js?v=steps-v2'
-import {BandMaskPlanner} from './band-mask.js?v=steps-v2'
+import {BandMaskPlanner} from './band-mask.js?v=mask-fast-v2'
+import {get} from '../projections/worker-index.js'
+import {DistortionField} from './distortion.js?v=atlas-fast-v2'
 
-const atlases=new Map(),planner=new BandMaskPlanner()
+const atlases=new Map(),fields=new Map(),planner=new BandMaskPlanner()
 self.addEventListener('message',event=>{
  const message=event.data
  if(message.type==='atlas'){
-  try{atlases.set(message.id,new ContourAtlas(message.data))}
+  try{
+   atlases.set(message.id,new ContourAtlas(message.data))
+   const pair=`${message.data.target}|${message.data.source}`
+   if(!fields.has(pair))fields.set(pair,new DistortionField(get(message.data.target),get(message.data.source)))
+  }
   catch(error){self.postMessage({type:'atlas-error',id:message.id,error:String(error)})}
   return
  }
@@ -14,8 +20,9 @@ self.addEventListener('message',event=>{
 
 async function runPlan(message){
  try{
-  const atlas=atlases.get(message.atlas)
-  const chunks=atlas?planner.planChunks(atlas,message.extent,message.width,message.height,message.anchor,{minimumStep:message.minimumStep}):[{failed:true}]
+  const atlas=atlases.get(message.atlas),field=atlas&&fields.get(`${atlas.data.target}|${atlas.data.source}`)
+  const anchor=message.anchor||(atlas&&field?tileAnchor(atlas,field,message.extent,message.width,message.height):null)
+  const chunks=atlas?planner.planChunks(atlas,message.extent,message.width,message.height,anchor,{minimumStep:message.minimumStep}):[{failed:true}]
   for(const chunk of chunks){
    if(chunk.failed){
     if(message.depth<4)self.postMessage({type:'split',key:message.key})
@@ -36,4 +43,13 @@ async function runPlan(message){
   if(message.depth<4)self.postMessage({type:'split',key:message.key})
   else self.postMessage({type:'failed',key:message.key})
  }
+}
+
+function tileAnchor(atlas,field,extent,width,height){
+ const samples=[[.5,.5],[.25,.5],[.75,.5],[.5,.25],[.5,.75],[.25,.25],[.75,.25],[.25,.75],[.75,.75]],atSource=atlas.data.coordinateProjection===atlas.data.source,distortionAt=atSource?point=>field.atSource(point):point=>field.at(point)
+ for(const [fx,fy] of samples){
+  const point=[extent[0]+fx*(extent[2]-extent[0]),extent[3]-fy*(extent[3]-extent[1])],value=distortionAt(point)
+  if(Number.isFinite(value))return {value,x:fx*width,y:fy*height}
+ }
+ return null
 }
