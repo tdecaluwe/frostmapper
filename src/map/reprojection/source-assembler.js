@@ -38,13 +38,19 @@ export class AssembledSourceTile extends Tile {
   if(parents.every(({tile})=>tile.getState()===TileState.EMPTY)){this.state=TileState.EMPTY;this.changed();return}
   const canvas=document.createElement('canvas');canvas.width=this.width;canvas.height=this.height
   const ctx=canvas.getContext('2d'),[left,bottom,right,top]=this.extent
-  for(const [zoom,{tile,coord}] of this.parents){
-   if(tile.getState()!==TileState.LOADED)continue
+  const draw=(zoom,{tile,coord},masked)=>{
+   if(tile.getState()!==TileState.LOADED)return
    const image=tile.getImage(),parent=this.grid.getTileCoordExtent(coord),pw=parent[2]-parent[0],ph=parent[3]-parent[1]
    const sx=(left-parent[0])/pw*image.width,sy=(parent[3]-top)/ph*image.height,sw=(right-left)/pw*image.width,sh=(top-bottom)/ph*image.height
-   ctx.save();ctx.beginPath();for(const span of this.spans)if(span.zoom===zoom)ctx.rect(span.x,span.y,span.width,span.height||1)
-   ctx.clip();ctx.drawImage(image,sx,sy,sw,sh,0,0,this.width,this.height);ctx.restore()
+   ctx.save()
+   if(masked){ctx.beginPath();for(const span of this.spans)if(span.zoom===zoom)ctx.rect(span.x,span.y,span.width,span.height||1);ctx.clip()}
+   ctx.drawImage(image,sx,sy,sw,sh,0,0,this.width,this.height);ctx.restore()
   }
+  const ordered=[...this.parents].sort((a,b)=>a[0]-b[0])
+  // Start with a complete coarse image so invalid contour samples or open
+  // paths at a projection cut cannot leave transparent holes in the tile.
+  if(ordered.length)draw(ordered[0][0],ordered[0][1],false)
+  for(const [zoom,parent] of ordered.slice(1))draw(zoom,parent,true)
   this.canvas=canvas;this.state=TileState.LOADED;this.changed()
  }
  release(){this.unlisten();this.parents.clear();this.canvas=null;super.release()}

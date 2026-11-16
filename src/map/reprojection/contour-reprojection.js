@@ -2,7 +2,7 @@ import {equivalent} from 'ol/proj.js'
 import {ContourAtlas} from './contour-atlas.js?v=fixed-bands'
 import {DistortionField} from './distortion.js'
 import {BandMaskPlanner} from './band-mask.js?v=fixed-bands'
-import {SourceTileAssembler} from './source-assembler.js?v=source-assembly'
+import {SourceTileAssembler} from './source-assembler.js?v=stable-contours'
 
 const FILES={'EPSG:3035':'epsg-3035','EPSG:PEIRCE':'epsg-peirce','FROST:TRIPTYCHIAL':'frost-triptychial'}
 
@@ -30,9 +30,9 @@ export class ContourReprojection {
   if(!atlas||!source){this.setSignature('none');return}
   if(!this.sourceAtlases.has(code)){
    this.sourceAtlases.set(code,null)
-   fetch(new URL(`../../../data/contours/source-${FILES[code]}.json?v=source-assembly`,import.meta.url)).then(r=>{if(!r.ok)throw Error(`Source contour data ${r.status}`);return r.json()}).then(data=>{
+   fetch(new URL(`../../../data/contours/source-${FILES[code]}.json?v=stable-contours`,import.meta.url)).then(r=>{if(!r.ok)throw Error(`Source contour data ${r.status}`);return r.json()}).then(data=>{
     if(data.target!==code||data.source!=='EPSG:3857'||data.coordinateProjection!=='EPSG:3857')throw Error('Source contour projection mismatch')
-    this.sourceAtlases.set(code,new ContourAtlas(data));this.update()
+    this.sourceAtlases.set(code,new ContourAtlas(data));for(const item of this.sources)item.changed();this.update()
    }).catch(error=>{console.error('Source contour data unavailable:',error);this.sourceAtlases.set(code,false)})
   }
   this.setSignature(code)
@@ -47,14 +47,27 @@ export class ContourReprojection {
   this.sources.add(source);const original=source.getTile,originalKey=source.getKey,manager=this
   const originalInternal=source.getTileInternal
   const assembler=new SourceTileAssembler(source);this.assemblers.set(source,assembler)
-  source.getKey=function(){return `${originalKey.call(this)}|bands:${manager.signature}`}
+  source.getKey=function(){return `${originalKey.call(this)}|bands:${manager.signature}|${manager.sourceAtlases.get(manager.signature)?'ready':'pending'}`}
   source.getTile=function(z,x,y,pixelRatio,target){
    const src=this.getProjection(),atlas=target&&manager.sourceAtlases.get(target.getCode())
    if(!atlas||!src||src.getCode()!=='EPSG:3857'||equivalent(src,target))return original.call(this,z,x,y,pixelRatio,target)
+   const sourceGrid=this.getTileGridForProjection(src),targetGrid=this.getTileGridForProjection(target),field=manager.field(target,src),targetAtlas=manager.atlases.get(target.getCode())
+   const coord=this.getTileCoordForTileUrlFunction([z,x,y],target)
+   if(!coord||!targetAtlas)return original.call(this,z,x,y,pixelRatio,target)
+   const extent=targetGrid.getTileCoordExtent(coord),size=targetGrid.getTileSize(z),width=typeof size==='number'?size:size[0],height=typeof size==='number'?size:size[1]
+   const reference=Math.round(Math.log2(sourceGrid.getResolution(0)/targetGrid.getResolution(z)))
+   const anchor=field.at([(extent[0]+extent[2])/2,(extent[1]+extent[3])/2])
+   let spans=manager.planner.plan(targetAtlas,extent,width,height,anchor)
+   const domain=targetAtlas.data.extent,normalized=[(extent[0]-domain[0])/(domain[2]-domain[0]),(extent[1]-domain[1])/(domain[3]-domain[1]),(extent[2]-domain[0])/(domain[2]-domain[0]),(extent[3]-domain[1])/(domain[3]-domain[1])]
+   if(spans&&!targetAtlas.canSkipValidation(normalized)&&!manager.planner.validate(spans,extent,width,height,field))spans=null
+   if(!spans)spans=manager.planner.sampledPlan(extent,width,height,field)
+   if(!spans)return original.call(this,z,x,y,pixelRatio,target)
+   const requested=Math.max(sourceGrid.getMinZoom(),Math.min(sourceGrid.getMaxZoom(),Math.max(...spans.map(span=>reference-span.band))))
+   const own=Object.prototype.hasOwnProperty.call(this,'getTileInternal')
    this.getTileInternal=function(sourceZ,sourceX,sourceY,ratio,projection){
-    return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{atlas,field:manager.field(target,src),planner:manager.planner,reference:sourceZ,original:originalInternal,cacheKey:this.getKey()})
+    return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{atlas,field,planner:manager.planner,reference,original:originalInternal,cacheKey:this.getKey()})
    }
-   try{return original.call(this,z,x,y,pixelRatio,target)}finally{this.getTileInternal=originalInternal}
+   try{return this.getTileAtSourceZoom(z,x,y,pixelRatio,target,requested)}finally{if(own)this.getTileInternal=originalInternal;else delete this.getTileInternal}
   }
   this.update()
  }
