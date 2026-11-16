@@ -1,7 +1,7 @@
 import {get,PROJECTION_STRINGS,TRIPTYCHIAL_CODE} from '../projections/worker-index.js'
-import {ContourAtlasBuilder} from './contour-atlas.js?v=atlas-fast-v1'
+import {ContourAtlasBuilder} from './contour-atlas.js?v=atlas-fast-v2'
 import {MAX_SOURCE_ZOOM} from './contour-atlas-config.js'
-import {refineTriptychialSourceAtlas,refineTriptychialTargetAtlas} from '../../../tools/refine-source-atlas.js?v=atlas-fast-v1'
+import {refineTriptychialSourceAtlas,refineTriptychialTargetAtlas} from '../../../tools/refine-source-atlas.js?v=atlas-fast-v2'
 
 self.addEventListener('message',event=>{
  const message=event.data

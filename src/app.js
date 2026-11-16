@@ -7,7 +7,7 @@ import {createMapView} from './map/projections/view.js?v=viewport-model'
 import {ProjectionViewport,ProjectionUnavailableError} from './map/projections/viewport.js'
 import {CanonicalZoom} from './map/projections/canonical-zoom.js'
 import {ZoomBandSource} from './map/reprojection/zoom-band-source.js?v=source-loads'
-import {ContourReprojection} from './map/reprojection/contour-reprojection.js?v=worker-plans-r5'
+import {ContourReprojection} from './map/reprojection/contour-reprojection.js?v=worker-plans-r6'
 const baseSource=new (ZoomBandSource(XYZ))({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})
 const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({preload:2,cacheSize:16384,source:baseSource})],view:createMapView('EPSG:3857',[10,50],4)})
 const contourReprojection=new ContourReprojection(map)

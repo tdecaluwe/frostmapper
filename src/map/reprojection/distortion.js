@@ -78,6 +78,10 @@ function projectionDistortionFromSource(target,source,point,step=100){
   if(sourceWidth)dx-=sourceWidth*Math.round(dx/sourceWidth)
   if(Math.hypot(dx,back[1]-point[1])>Math.max(1,step*.01))return null
   const sample=coordinate=>{
+   // distortionAt samples the center again before taking its finite
+   // differences. Reuse the already validated projection result instead of
+   // projecting every field point twice.
+   if(coordinate[0]===point[0]&&coordinate[1]===point[1])return center
    if(!inside(coordinate,sourceExtent,sourceWidth))return null
    const result=transform(coordinate,source,target)
    return result.every(Number.isFinite)&&inside(result,targetExtent,targetWidth)?result:null

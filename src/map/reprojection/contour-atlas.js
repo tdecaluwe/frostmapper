@@ -1,5 +1,5 @@
-import {DistortionField} from './distortion.js?v=atlas-fast-v1'
-import {traceContoursMulti} from './contour-trace.js?v=atlas-fast-v1'
+import {DistortionField} from './distortion.js?v=atlas-fast-v2'
+import {traceContoursMulti} from './contour-trace.js?v=atlas-fast-v2'
 import {fitContour} from './curve-fit.js'
 import {ContourAtlas} from './contour-atlas-index.js'
 export {ContourAtlas} from './contour-atlas-index.js'

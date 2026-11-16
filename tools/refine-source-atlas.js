@@ -1,6 +1,6 @@
 import {get,transform} from 'https://esm.sh/ol@10.6.1/proj.js'
-import {DistortionField} from '../src/map/reprojection/distortion.js?v=atlas-fast-v1'
-import {traceContoursMulti} from '../src/map/reprojection/contour-trace.js?v=atlas-fast-v1'
+import {DistortionField} from '../src/map/reprojection/distortion.js?v=atlas-fast-v2'
+import {traceContoursMulti} from '../src/map/reprojection/contour-trace.js?v=atlas-fast-v2'
 import {fitContour} from '../src/map/reprojection/curve-fit.js'
 
 // The global source grid is intentionally coarse near Grieger's Galápagos
@@ -33,7 +33,10 @@ export function refineTriptychialSourceAtlas(atlas,{tolerance=.05}={}){
   }
  }
  sample([-96,-5,-84,5],1537,1025,[-8,-12])
- sample([-92,-2,-88,2],1025,1025,[-32,-28,-24,-20,-16,-12])
+ // This broad Galápagos refinement is smooth enough for a 513² grid. A
+ // regional benchmark against the live field found no band errors at this
+ // resolution; the smaller singularity-focused patch below remains dense.
+ sample([-92,-2,-88,2],513,513,[-32,-28,-24,-20,-16,-12])
  sample([-90.5,-.5,-89.5,.5],1025,1025,[-32,-28,-24])
  return atlas
 }

@@ -1,7 +1,7 @@
 import {PROJECTION_STRINGS} from '../projections/index.js?v=grieger-wrap'
 import {MAX_SOURCE_ZOOM} from './contour-atlas-config.js'
 
-const CACHE_PREFIX='frostmapper:contour-atlas:v3:'
+const CACHE_PREFIX='frostmapper:contour-atlas:v4:'
 
 export function contourAtlasCacheKey(targetDefinition,sourceDefinition,coordinateProjection){
  return `${CACHE_PREFIX}${coordinateProjection}:${targetDefinition}:${sourceDefinition}`
@@ -15,7 +15,7 @@ export class ContourAtlasPreparer{
  createWorker(){
   if(this.worker)return true
   try{
-   this.worker=new Worker(new URL('./contour-atlas-worker.js?v=atlas-fast-v1',import.meta.url),{type:'module'})
+   this.worker=new Worker(new URL('./contour-atlas-worker.js?v=atlas-fast-v2',import.meta.url),{type:'module'})
    this.worker.onmessage=event=>this.receive(event.data)
    this.worker.onerror=event=>this.failAll(event.message||'Contour atlas worker failed')
   }catch{this.worker=null}
