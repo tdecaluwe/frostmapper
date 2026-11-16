@@ -42,7 +42,9 @@ function planWithSplits(atlas,request,makeChildren,depth=0){
  }
  return Int32Array.from(packed)
 }
-manager.planWorker={revision:0,register(){},peek(){return null},enqueue(id,key,makeRequest,source,makeChildren){const request=makeRequest(),atlas=id.endsWith(':target')?manager.atlases.get(target.getCode()):manager.sourceAtlases.get(target.getCode());return {ready:true,spans:planWithSplits(atlas,request,makeChildren)}}}
+const read=name=>JSON.parse(require('fs').readFileSync(name==='source-frost-triptychial.json'&&process.env.FROSTMAPPER_ATLAS?process.env.FROSTMAPPER_ATLAS:new URL(`./fixtures/contours/${name}`,import.meta.url),'utf8'))
+manager.sourceAtlases.set(target.getCode(),new ContourAtlas(read('source-frost-triptychial.json')))
+manager.planWorker={revision:0,register(){},peek(){return null},enqueue(id,key,makeRequest,source,makeChildren){const request=makeRequest(),atlas=manager.sourceAtlases.get(target.getCode());return {ready:true,complete:true,spans:planWithSplits(atlas,request,makeChildren)}}}
 manager.addSource(source)
 const assembler=manager.assemblers.get(source),assemble=assembler.getTile.bind(assembler),sourceTiles=[]
 assembler.getTile=function(z,x,y,pixelRatio,projection,options){
@@ -50,9 +52,6 @@ assembler.getTile=function(z,x,y,pixelRatio,projection,options){
  sourceTiles.push({extent,reference:options.reference,minimumZoom:options.minimumZoom,maximumZoom:options.maximumZoom})
  return assemble(z,x,y,pixelRatio,projection,options)
 }
-const read=name=>JSON.parse(require('fs').readFileSync(name==='source-frost-triptychial.json'&&process.env.FROSTMAPPER_ATLAS?process.env.FROSTMAPPER_ATLAS:new URL(`./fixtures/contours/${name}`,import.meta.url),'utf8'))
-manager.atlases.set(target.getCode(),new ContourAtlas(read('frost-triptychial.json')))
-manager.sourceAtlases.set(target.getCode(),new ContourAtlas(read('source-frost-triptychial.json')))
 activeProjection=target;manager.setSignature(target.getCode())
 const targetGrid=source.getTileGridForProjection(target),sourceGrid=source.getTileGridForProjection(src),field=manager.field(target,src),results=[]
 // A tile containing the Galápagos singularity plus its three neighbors.

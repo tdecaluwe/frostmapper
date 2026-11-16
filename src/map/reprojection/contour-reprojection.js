@@ -1,4 +1,5 @@
 import {equivalent} from 'ol/proj.js'
+import {wrapAndSliceX} from 'ol/extent.js'
 import {DistortionField} from './distortion.js?v=runtime-atlas'
 import {ContourPlanClient} from './contour-plan-client.js?v=incremental-mask'
 import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r4'
@@ -35,56 +36,50 @@ function splitTile(extent,width,height,anchorAt,minimumQuarter){
 // plans. The source adapter below owns OpenLayers integration for each layer.
 export class ContourReprojection {
  constructor(map){
-  this.map=map;this.atlases=new Map();this.sourceAtlases=new Map();this.fields=new Map();this.sources=new Set();this.assemblers=new WeakMap();this.signature='none';this.atlasPreparer=new ContourAtlasPreparer()
+  this.map=map;this.sourceAtlases=new Map();this.fields=new Map();this.sources=new Set();this.assemblers=new WeakMap();this.signature='none';this.atlasPreparer=new ContourAtlasPreparer()
   this.planWorker=new ContourPlanClient()
   map.on('change:view',()=>this.update())
-  map.on('moveend',()=>this.prepareViewport())
   this.update()
  }
  field(target,source){const key=`${target.getCode()}|${source.getCode()}`;if(!this.fields.has(key))this.fields.set(key,new DistortionField(target,source));return this.fields.get(key)}
  update(){
   const view=this.map.getView(),projection=view.getProjection(),code=projection.getCode()
   if(!['EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL'].includes(code)){this.setSignature('none');return}
-  if(!this.atlases.has(code)){
-   this.atlases.set(code,null)
-   this.atlasPreparer.prepare(code,'target').then(data=>{
-    if(data.target!==code||data.source!=='EPSG:3857')throw Error('Contour projection mismatch')
-    this.atlases.set(code,true);this.planWorker.register(`${code}:target`,data);this.update();this.prepareViewport()
-   }).catch(error=>{console.error('Contour atlas preparation failed:',error);this.atlases.set(code,false)})
-  }
-  const atlas=this.atlases.get(code),source=[...this.sources].find(s=>s.getProjection()?.getCode()==='EPSG:3857')
-  if(!atlas||!source){this.setSignature('none');return}
+  const source=[...this.sources].find(s=>s.getProjection()?.getCode()==='EPSG:3857')
+  if(!source){this.setSignature('none');return}
   if(!this.sourceAtlases.has(code)){
    this.sourceAtlases.set(code,null)
    this.atlasPreparer.prepare(code,'source').then(data=>{
     if(data.target!==code||data.source!=='EPSG:3857'||data.coordinateProjection!=='EPSG:3857')throw Error('Source contour projection mismatch')
-    this.sourceAtlases.set(code,true);this.planWorker.register(`${code}:source`,data);for(const item of this.sources)item.changed();this.update();this.prepareViewport()
+    this.sourceAtlases.set(code,data);this.planWorker.register(`${code}:source`,data);for(const item of this.sources)item.changed();this.update()
    }).catch(error=>{console.error('Source contour atlas preparation failed:',error);this.sourceAtlases.set(code,false)})
   }
-  this.setSignature(code)
+  if(this.sourceAtlases.get(code))this.setSignature(code)
+  else this.setSignature('none')
  }
- targetPlan(source,code,z,coord,extent,width,height,field){
-  const target=this.map.getView().getProjection(),targetGrid=source.getTileGridForProjection(target),sourceGrid=source.getTileGridForProjection(source.getProjection()),reference=Math.round(Math.log2(sourceGrid.getResolution(0)/targetGrid.getResolution(z))),minimumQuarter=4*(reference-sourceGrid.getMaxZoom())
-  const key=`${z}/${coord[1]}/${coord[2]}/${width}/${height}/q${minimumQuarter}`
-  const id=`${code}:target`,cached=this.planWorker.peek(id,key)
+ sourcePlan(source,code,key,extent,width,height,minimumQuarter,field){
+  const id=`${code}:source`,cached=this.planWorker.peek(id,key)
   if(cached)return cached
-  const anchorAt=(tileExtent,tileWidth,tileHeight)=>tileAnchor(tileExtent,tileWidth,tileHeight,point=>field.at(point))
+  const anchorAt=(tileExtent,tileWidth,tileHeight)=>tileAnchor(tileExtent,tileWidth,tileHeight,point=>field.atSource(point))
   return this.planWorker.enqueue(id,key,()=>({extent,width,height,anchor:anchorAt(extent,width,height),minimumQuarter}),source,()=>splitTile(extent,width,height,anchorAt,minimumQuarter))
  }
- prepareViewport(){
-  const view=this.map.getView(),code=view.getProjection().getCode(),source=[...this.sources].find(item=>item.getProjection()?.getCode()==='EPSG:3857'),atlas=this.atlases.get(code)
-  if(!source||!atlas||!this.sourceAtlases.get(code))return
-  const grid=source.getTileGridForProjection(view.getProjection()),size=this.map.getSize()
-  if(!size||!size[0]||!size[1])return
-  const z=grid.getZForResolution(view.getResolution()),range=grid.getTileRangeForExtentAndZ(view.calculateExtent(size),z),tileSize=grid.getTileSize(z)
-  const width=typeof tileSize==='number'?tileSize:tileSize[0],height=typeof tileSize==='number'?tileSize:tileSize[1]
-  const field=this.field(view.getProjection(),source.getProjection()),minX=range.minX-1,maxX=range.maxX+1,minY=range.minY-1,maxY=range.maxY+1
-  for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){
-   const coord=[z,x,y],normalized=source.getTileCoordForTileUrlFunction(coord,view.getProjection())
-   if(!normalized)continue
-   const extent=grid.getTileCoordExtent(normalized)
-   this.targetPlan(source,code,z,normalized,extent,width,height,field)
+ footprintPlan(source,code,z,coord,sourceExtent,reference,minimumQuarter,field){
+  const sourceProjection=source.getProjection(),parts=wrapAndSliceX(sourceExtent.slice(),sourceProjection,true)
+  if(!parts.length)return null
+  const sourceGrid=source.getTileGridForProjection(sourceProjection),width=256,height=256
+  let lowest=sourceGrid.getMaxZoom(),highest=sourceGrid.getMinZoom()
+  const plans=parts.map((extent,part)=>{
+   const extentKey=extent.map(value=>Math.round(value*1000)).join(','),key=`footprint/${z}/${coord[1]}/${coord[2]}/${width}x${height}/q${minimumQuarter}/${part}/${extentKey}`
+   return this.sourcePlan(source,code,key,extent,width,height,minimumQuarter,field)
+  })
+  if(plans.some(planned=>!planned?.ready||!planned.complete||!planned.spans))return null
+  for(const planned of plans){
+   eachSpan(planned.spans,span=>{
+    const desired=Math.max(sourceGrid.getMinZoom(),Math.min(sourceGrid.getMaxZoom(),reference-span.band))
+    lowest=Math.min(lowest,desired);highest=Math.max(highest,desired)
+   })
   }
+  return {lowest,highest,requested:Math.min(sourceGrid.getMaxZoom(),lowest+(highest>lowest?1:0)),maximumZoom:Math.min(highest,lowest+2)}
  }
  setSignature(signature){
   if(this.signature===signature)return
@@ -100,32 +95,27 @@ export class ContourReprojection {
   source.getTile=function(z,x,y,pixelRatio,target){
    const src=this.getProjection(),atlas=target&&manager.sourceAtlases.get(target.getCode())
    if(!atlas||!src||src.getCode()!=='EPSG:3857'||equivalent(src,target))return original.call(this,z,x,y,pixelRatio,target)
-   const sourceGrid=this.getTileGridForProjection(src),targetGrid=this.getTileGridForProjection(target),field=manager.field(target,src),targetAtlas=manager.atlases.get(target.getCode())
+   const sourceGrid=this.getTileGridForProjection(src),targetGrid=this.getTileGridForProjection(target),field=manager.field(target,src)
    const coord=this.getTileCoordForTileUrlFunction([z,x,y],target)
-   if(!coord||!targetAtlas)return original.call(this,z,x,y,pixelRatio,target)
-   const extent=targetGrid.getTileCoordExtent(coord),size=targetGrid.getTileSize(z),width=typeof size==='number'?size:size[0],height=typeof size==='number'?size:size[1]
+   if(!coord)return original.call(this,z,x,y,pixelRatio,target)
    const reference=Math.round(Math.log2(sourceGrid.getResolution(0)/targetGrid.getResolution(z)))
-   const planned=manager.targetPlan(this,target.getCode(),z,coord,extent,width,height,field)
-   if(!planned.ready||!planned.spans)return original.call(this,z,x,y,pixelRatio,target)
-   const spans=planned.spans
-   if(!spans)return original.call(this,z,x,y,pixelRatio,target)
-   let lowest=sourceGrid.getMaxZoom(),highest=sourceGrid.getMinZoom()
-   eachSpan(spans,span=>{const desired=Math.max(sourceGrid.getMinZoom(),Math.min(sourceGrid.getMaxZoom(),reference-span.band));lowest=Math.min(lowest,desired);highest=Math.max(highest,desired)})
-   const requested=Math.min(sourceGrid.getMaxZoom(),lowest+(highest>lowest?1:0))
+   const minimumQuarter=4*(reference-sourceGrid.getMaxZoom()),selection={}
+   const selectZoom=sourceExtent=>{
+    const result=manager.footprintPlan(this,target.getCode(),z,coord,sourceExtent,reference,minimumQuarter,field)
+    if(!result)return undefined
+    Object.assign(selection,result);return result.requested
+   }
    const own=Object.prototype.hasOwnProperty.call(this,'getTileInternal')
    this.getTileInternal=function(sourceZ,sourceX,sourceY,ratio,projection){
+    if(!Number.isFinite(selection.lowest))return originalInternal.call(this,sourceZ,sourceX,sourceY,ratio,projection)
     const sourceCoord=this.getTileCoordForTileUrlFunction([sourceZ,sourceX,sourceY],projection)
     if(!sourceCoord)return originalInternal.call(this,sourceZ,sourceX,sourceY,ratio,projection)
-    const sourceExtent=sourceGrid.getTileCoordExtent(sourceCoord),sourceSize=sourceGrid.getTileSize(sourceZ),sourceWidth=typeof sourceSize==='number'?sourceSize:sourceSize[0],sourceHeight=typeof sourceSize==='number'?sourceSize:sourceSize[1],maximumZoom=Math.min(highest,lowest+2),minimumQuarter=4*(reference-maximumZoom),sourceKey=`${sourceZ}/${sourceCoord[1]}/${sourceCoord[2]}/${sourceWidth}/${sourceHeight}/q${minimumQuarter}`,sourceId=`${target.getCode()}:source`
-    let sourcePlan=manager.planWorker.peek(sourceId,sourceKey)
-    if(!sourcePlan){
-     const anchorAt=(tileExtent,tileWidth,tileHeight)=>tileAnchor(tileExtent,tileWidth,tileHeight,point=>field.atSource(point))
-     sourcePlan=manager.planWorker.enqueue(sourceId,sourceKey,()=>({extent:sourceExtent,width:sourceWidth,height:sourceHeight,anchor:anchorAt(sourceExtent,sourceWidth,sourceHeight),minimumQuarter}),this,()=>splitTile(sourceExtent,sourceWidth,sourceHeight,anchorAt,minimumQuarter))
-    }
+    const sourceExtent=sourceGrid.getTileCoordExtent(sourceCoord),sourceSize=sourceGrid.getTileSize(sourceZ),sourceWidth=typeof sourceSize==='number'?sourceSize:sourceSize[0],sourceHeight=typeof sourceSize==='number'?sourceSize:sourceSize[1],maximumZoom=selection.maximumZoom,sourceMinimumQuarter=4*(reference-maximumZoom),sourceKey=`${sourceZ}/${sourceCoord[1]}/${sourceCoord[2]}/${sourceWidth}/${sourceHeight}/q${sourceMinimumQuarter}`
+    const sourcePlan=manager.sourcePlan(this,target.getCode(),sourceKey,sourceExtent,sourceWidth,sourceHeight,sourceMinimumQuarter,field)
     if(!sourcePlan.ready||!sourcePlan.spans)return originalInternal.call(this,sourceZ,sourceX,sourceY,ratio,projection)
-    return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{spans:sourcePlan.spans,reference,minimumZoom:lowest,maximumZoom,original:originalInternal,cacheKey:this.getKey()})
+    return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{spans:sourcePlan.spans,reference,minimumZoom:selection.lowest,maximumZoom,original:originalInternal,cacheKey:this.getKey()})
    }
-   try{return this.getTileAtSourceZoom(z,x,y,pixelRatio,target,requested)}finally{if(own)this.getTileInternal=originalInternal;else delete this.getTileInternal}
+   try{return this.getTileAtSourceZoom(z,x,y,pixelRatio,target,undefined,undefined,undefined,selectZoom)}finally{if(own)this.getTileInternal=originalInternal;else delete this.getTileInternal}
   }
   this.update()
  }

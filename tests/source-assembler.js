@@ -11,8 +11,8 @@ const errors=[],map=new Map({target:'map',layers:[],controls:[],view:createMapVi
 const zooms=spans=>ArrayBuffer.isView(spans)?Array.from(spans).filter((_,index)=>index%4===3):spans.map(span=>span.zoom)
 const source=new XYZ({projection:'EPSG:3857',tileUrlFunction:([z])=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="hsl(${z*24} 80% 50%)"/></svg>`)}`,maxZoom:14,crossOrigin:'anonymous'})
 guardReprojection(source)
-const manager=new ContourReprojection(map);manager.addSource(source)
-for(let i=0;i<200&&(!manager.sourceAtlases.get('FROST:TRIPTYCHIAL')||!manager.atlases.get('FROST:TRIPTYCHIAL'));i++)await new Promise(resolve=>setTimeout(resolve,25))
+const manager=new ContourReprojection(map),atlasData=await(await fetch('./fixtures/contours/source-frost-triptychial.json')).json()
+manager.sourceAtlases.set('FROST:TRIPTYCHIAL',atlasData);manager.planWorker.register('FROST:TRIPTYCHIAL:source',atlasData);manager.addSource(source)
 const atlas=manager.sourceAtlases.get('FROST:TRIPTYCHIAL')
 if(!atlas)errors.push('source projection atlas did not load')
 let reproj

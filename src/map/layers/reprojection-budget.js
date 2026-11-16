@@ -78,7 +78,7 @@ export function guardReprojection(source) {
  if(guardedSources.has(source))return
  guardedSources.add(source)
  const getTile=source.getTile
- function guardedTile(z,x,y,pixelRatio,targetProjection,requestedZoom,areaRatio=MAX_SOURCE_AREA_RATIO,nativeRatio=MAX_NATIVE_SOURCE_AREA_RATIO){
+ function guardedTile(z,x,y,pixelRatio,targetProjection,requestedZoom,areaRatio=MAX_SOURCE_AREA_RATIO,nativeRatio=MAX_NATIVE_SOURCE_AREA_RATIO,selectSourceZoom=null){
   const sourceProjection=this.getProjection()
   if(!sourceProjection||!targetProjection||equivalent(sourceProjection,targetProjection))return getTile.call(this,z,x,y,pixelRatio,targetProjection)
   const sourceGrid=this.getTileGridForProjection(sourceProjection)
@@ -107,6 +107,10 @@ export function guardReprojection(source) {
    sourceGrid.getZForResolution=function(resolution,...args){
     let sourceZ=Number.isInteger(requestedZoom)?Math.max(this.getMinZoom(),Math.min(this.getMaxZoom(),requestedZoom)):original.call(this,resolution,...args)
     const extent=sourceFootprint(owner,sourceProjection,targetProjection,sourceGrid,targetGrid,coord,resolution,currentTriangulation)
+    if(extent&&selectSourceZoom){
+     const selected=selectSourceZoom(extent,{resolution,sourceZoom:sourceZ})
+     if(Number.isInteger(selected))sourceZ=Math.max(sourceGrid.getMinZoom(),Math.min(sourceGrid.getMaxZoom(),selected))
+    }
     if(!extent)return sourceZ
     for(;sourceZ>=sourceGrid.getMinZoom();sourceZ--){
      const [width,height]=estimateStitchSize(extent,sourceProjection,sourceGrid,sourceZ,effectiveRatio)
@@ -141,5 +145,5 @@ export function guardReprojection(source) {
  }
  source.getTile=function(z,x,y,pixelRatio,targetProjection){return guardedTile.call(this,z,x,y,pixelRatio,targetProjection)}
  // Reuse the same bounds when a contour band requests a specific source zoom.
- source.getTileAtSourceZoom=function(z,x,y,pixelRatio,targetProjection,sourceZoom,areaRatio,nativeRatio){return guardedTile.call(this,z,x,y,pixelRatio,targetProjection,sourceZoom,areaRatio,nativeRatio)}
+ source.getTileAtSourceZoom=function(z,x,y,pixelRatio,targetProjection,sourceZoom,areaRatio,nativeRatio,selectSourceZoom){return guardedTile.call(this,z,x,y,pixelRatio,targetProjection,sourceZoom,areaRatio,nativeRatio,selectSourceZoom)}
 }
