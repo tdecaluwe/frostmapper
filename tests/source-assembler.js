@@ -5,8 +5,8 @@ import TileState from 'ol/TileState.js'
 import {get} from 'ol/proj.js'
 import {createMapView} from '../src/map/projections/view.js?v=viewport-model'
 import {guardReprojection} from '../src/map/layers/reprojection-budget.js?v=contour-bands'
-import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=stable-contours'
-import {AssembledSourceTile} from '../src/map/reprojection/source-assembler.js?v=stable-contours'
+import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=mixed-zoom'
+import {AssembledSourceTile} from '../src/map/reprojection/source-assembler.js?v=mixed-zoom'
 const errors=[],map=new Map({target:'map',layers:[],controls:[],view:createMapView('FROST:TRIPTYCHIAL',[8.54,47.37],5)})
 const source=new XYZ({projection:'EPSG:3857',tileUrlFunction:([z])=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="hsl(${z*24} 80% 50%)"/></svg>`)}`,maxZoom:14,crossOrigin:'anonymous'})
 guardReprojection(source)

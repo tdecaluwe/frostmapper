@@ -2,7 +2,7 @@ import {equivalent} from 'ol/proj.js'
 import {ContourAtlas} from './contour-atlas.js?v=fixed-bands'
 import {DistortionField} from './distortion.js'
 import {BandMaskPlanner} from './band-mask.js?v=fixed-bands'
-import {SourceTileAssembler} from './source-assembler.js?v=stable-contours'
+import {SourceTileAssembler} from './source-assembler.js?v=mixed-zoom'
 
 const FILES={'EPSG:3035':'epsg-3035','EPSG:PEIRCE':'epsg-peirce','FROST:TRIPTYCHIAL':'frost-triptychial'}
 
@@ -62,10 +62,12 @@ export class ContourReprojection {
    if(spans&&!targetAtlas.canSkipValidation(normalized)&&!manager.planner.validate(spans,extent,width,height,field))spans=null
    if(!spans)spans=manager.planner.sampledPlan(extent,width,height,field)
    if(!spans)return original.call(this,z,x,y,pixelRatio,target)
-   const requested=Math.max(sourceGrid.getMinZoom(),Math.min(sourceGrid.getMaxZoom(),Math.max(...spans.map(span=>reference-span.band))))
+   const desired=spans.map(span=>Math.max(sourceGrid.getMinZoom(),Math.min(sourceGrid.getMaxZoom(),reference-span.band)))
+   const lowest=Math.min(...desired),highest=Math.max(...desired)
+   const requested=Math.min(sourceGrid.getMaxZoom(),lowest+(highest>lowest?1:0))
    const own=Object.prototype.hasOwnProperty.call(this,'getTileInternal')
    this.getTileInternal=function(sourceZ,sourceX,sourceY,ratio,projection){
-    return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{atlas,field,planner:manager.planner,reference,original:originalInternal,cacheKey:this.getKey()})
+    return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{atlas,field,planner:manager.planner,reference,minimumZoom:lowest,maximumZoom:Math.min(highest,lowest+2),original:originalInternal,cacheKey:this.getKey()})
    }
    try{return this.getTileAtSourceZoom(z,x,y,pixelRatio,target,requested)}finally{if(own)this.getTileInternal=originalInternal;else delete this.getTileInternal}
   }
