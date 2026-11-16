@@ -64,4 +64,16 @@ export function projectionDistortion(target,source,point,step=100){
 export class DistortionField {
  constructor(target,source,{step=100}={}){this.target=target;this.source=source;this.step=step}
  at(point){return projectionDistortion(this.target,this.source,point,this.step)}
+ atSource(point){
+  try{
+   const target=transform(point,this.source,this.target),extent=this.target.getExtent()
+   if(!target.every(Number.isFinite)||extent&&(target[1]<extent[1]||target[1]>extent[3]||(!this.target.canWrapX()&&(target[0]<extent[0]||target[0]>extent[2]))))return null
+   const back=transform(target,this.target,this.source),sourceExtent=this.source.getExtent()
+   if(!back.every(Number.isFinite))return null
+   let dx=back[0]-point[0]
+   if(this.source.canWrapX()&&sourceExtent){const width=sourceExtent[2]-sourceExtent[0];dx-=width*Math.round(dx/width)}
+   if(Math.hypot(dx,back[1]-point[1])>Math.max(1,this.step*.01))return null
+   return this.at(target)
+  }catch{return null}
+ }
 }
