@@ -5,8 +5,8 @@ import TileState from 'ol/TileState.js'
 import {get} from 'ol/proj.js'
 import {createMapView} from '../src/map/projections/view.js?v=viewport-model'
 import {guardReprojection} from '../src/map/layers/reprojection-budget.js?v=contour-bands'
-import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=mixed-zoom'
-import {AssembledSourceTile} from '../src/map/reprojection/source-assembler.js?v=mixed-zoom'
+import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=source-loads'
+import {AssembledSourceTile} from '../src/map/reprojection/source-assembler.js?v=source-loads'
 const errors=[],map=new Map({target:'map',layers:[],controls:[],view:createMapView('FROST:TRIPTYCHIAL',[8.54,47.37],5)})
 const source=new XYZ({projection:'EPSG:3857',tileUrlFunction:([z])=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="hsl(${z*24} 80% 50%)"/></svg>`)}`,maxZoom:14,crossOrigin:'anonymous'})
 guardReprojection(source)
@@ -19,7 +19,7 @@ if(atlas){
  const grid=source.getTileGridForProjection(get('FROST:TRIPTYCHIAL')),coord=grid.getTileCoordForCoordAndZ(get('EPSG:3857').getExtent().slice(0,2),5)
  // Search visible target tiles for one whose source footprint intersects bands.
  const extent=map.getView().calculateExtent(map.getSize()),z=grid.getZForResolution(map.getView().getResolution()),range=grid.getTileRangeForExtentAndZ(extent,z)
- for(let y=range.minY;y<=range.maxY&&!reproj;y++)for(let x=range.minX;x<=range.maxX&&!reproj;x++){const tile=source.getTile(z,x,y,1,get('FROST:TRIPTYCHIAL'));if(tile.sourceTiles_?.some(({tile})=>tile instanceof AssembledSourceTile))reproj=tile;else tile.release()}
+ for(let y=range.minY;y<=range.maxY&&!reproj;y++)for(let x=range.minX;x<=range.maxX&&!reproj;x++){const tile=source.getTile(z,x,y,1,get('FROST:TRIPTYCHIAL'));if(tile.sourceTiles_?.some(({tile})=>tile instanceof AssembledSourceTile&&new Set(tile.spans.map(s=>s.zoom)).size>1))reproj=tile;else tile.release()}
  if(!reproj)errors.push('ReprojTile did not receive assembled source tiles')
 }
 if(reproj){

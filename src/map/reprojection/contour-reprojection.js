@@ -2,7 +2,7 @@ import {equivalent} from 'ol/proj.js'
 import {ContourAtlas} from './contour-atlas.js?v=fixed-bands'
 import {DistortionField} from './distortion.js'
 import {BandMaskPlanner} from './band-mask.js?v=fixed-bands'
-import {SourceTileAssembler} from './source-assembler.js?v=mixed-zoom'
+import {SourceTileAssembler} from './source-assembler.js?v=source-loads'
 
 const FILES={'EPSG:3035':'epsg-3035','EPSG:PEIRCE':'epsg-peirce','FROST:TRIPTYCHIAL':'frost-triptychial'}
 
