@@ -53,38 +53,64 @@ class TilePool {
 }
 
 export class AssembledZoomTile extends Tile {
- constructor(coord,parents,spans,extent,grid,width,height,options,fallback){
-  super(coord,TileState.IDLE,options);this.parents=parents;this.spans=spans;this.extent=extent;this.grid=grid;this.width=width;this.height=height;this.canvas=null;this.listeners=[];this.fallback=fallback
+ constructor(coord,parents,spans,extent,grid,width,height,options,fallback,initialZoom=parents.values().next().value?.zoom??coord[0]){
+  super(coord,TileState.IDLE,options);this.parents=parents;this.spans=spans;this.extent=extent;this.grid=grid;this.width=width;this.height=height;this.canvas=null;this.listeners=[];this.fallback=fallback;this.initialZoom=initialZoom;this.baseZoom=Math.min(...[...parents.values()].map(parent=>parent.zoom));this.initiallyComplete=false;this.refinementStarted=false;this.refined=false;this.waitingForFirstImage=false
  }
  getImage(){return this.canvas}
  load(){
   if(this.state!==TileState.IDLE)return
   this.state=TileState.LOADING;this.changed()
-  for(const {tile} of this.parents.values()){
-   const listener=()=>this.update();tile.addEventListener('change',listener);this.listeners.push([tile,listener])
-  }
-  for(const {tile} of this.parents.values())if(tile.getState()===TileState.IDLE)tile.load()
+  // OpenLayers ReprojTile snapshots source images once they report LOADED.
+  // Load the zoom selected by the supervisor first. This stays sharp enough
+  // for the current viewport while avoiding the other band-specific requests.
+  this.initiallyComplete=[...this.parents.values()].every(({tile})=>this.settled(tile))
+  for(const {tile} of this.parents.values())this.listen(tile)
+  for(const parent of this.parents.values())if((this.initiallyComplete||parent.zoom===this.initialZoom)&&parent.tile.getState()===TileState.IDLE)parent.tile.load()
   this.update()
  }
+ settled(tile){const state=tile.getState();return state===TileState.LOADED||state===TileState.ERROR||state===TileState.EMPTY}
+ listen(tile){if(this.listeners.some(([existing])=>existing===tile))return;const listener=()=>this.update();tile.addEventListener('change',listener);this.listeners.push([tile,listener])}
  unlisten(){for(const [tile,listener] of this.listeners)tile.removeEventListener('change',listener);this.listeners=[]}
  update(){
-  if(this.state!==TileState.LOADING)return
-  const parents=[...this.parents.values()]
-  if(parents.some(({tile})=>tile.getState()===TileState.IDLE||tile.getState()===TileState.LOADING))return
-  if(this.fallback&&parents.some(({tile})=>tile.getState()===TileState.ERROR)){
-   const make=this.fallback;this.fallback=null
-   const parent=make()
-   if(parent){
-    this.parents.set('emergency',parent)
-    const listener=()=>this.update();parent.tile.addEventListener('change',listener);this.listeners.push([parent.tile,listener])
-    if(parent.tile.getState()===TileState.IDLE)parent.tile.load()
-    if(parent.tile.getState()===TileState.IDLE||parent.tile.getState()===TileState.LOADING)return
+  if(this.state===TileState.LOADING){
+   if(this.waitingForFirstImage){
+    if([...this.parents.values()].some(({tile})=>!this.settled(tile)))return
+    const loaded=this.loadedParents();this.unlisten()
+    if(!loaded.length){this.state=[...this.parents.values()].some(({tile})=>tile.getState()===TileState.ERROR)?TileState.ERROR:TileState.EMPTY;this.changed();return}
+    this.render(loaded);this.refined=true;this.state=TileState.LOADED;this.changed();return
    }
-   return this.update()
+   const initial=this.zoomParents(this.initialZoom)
+   if(initial.some(({tile})=>!this.settled(tile)))return
+   if(!initial.some(({tile})=>tile.getState()===TileState.LOADED)&&this.fallback){
+    const parent=this.fallback();this.fallback=null
+    if(parent){this.parents.set('emergency',parent);this.initialZoom=parent.zoom;this.baseZoom=Math.min(this.baseZoom,parent.zoom);this.listen(parent.tile);if(parent.tile.getState()===TileState.IDLE)parent.tile.load();if(!this.settled(parent.tile))return}
+   }
+   const loaded=this.loadedParents()
+   if(!loaded.length){
+    const pending=[...this.parents.values()].filter(({tile})=>!this.settled(tile))
+    if(pending.length){this.waitingForFirstImage=true;for(const {tile} of pending)if(tile.getState()===TileState.IDLE)tile.load();return}
+    this.unlisten();this.state=[...this.parents.values()].some(({tile})=>tile.getState()===TileState.ERROR)?TileState.ERROR:TileState.EMPTY;this.changed();return
+   }
+   if(this.initiallyComplete){this.render(loaded);this.refined=true;this.unlisten()}
+   else this.render(loaded)
+   this.state=TileState.LOADED;this.changed()
+   if(!this.initiallyComplete)this.startRefinement()
+   return
   }
-  this.unlisten()
-  const loaded=parents.filter(({tile})=>tile.getState()===TileState.LOADED)
-  if(!loaded.length){this.state=parents.some(({tile})=>tile.getState()===TileState.ERROR)?TileState.ERROR:TileState.EMPTY;this.changed();return}
+  if(this.state!==TileState.LOADED||!this.refinementStarted||this.refined)return
+  const parents=[...this.parents.values()].filter(parent=>parent.zoom!==this.initialZoom)
+  if(parents.some(({tile})=>!this.settled(tile)))return
+  this.render(this.loadedParents());this.refined=true;this.unlisten();this.changed()
+ }
+ zoomParents(zoom){return [...this.parents.values()].filter(parent=>parent.zoom===zoom)}
+ loadedParents(){return [...this.parents.values()].filter(({tile})=>tile.getState()===TileState.LOADED)}
+ startRefinement(){
+  if(this.refinementStarted)return
+  this.refinementStarted=true
+  for(const parent of this.parents.values())if(parent.zoom!==this.initialZoom&&parent.tile.getState()===TileState.IDLE)parent.tile.load()
+  this.update()
+ }
+ render(loaded){
   const canvas=document.createElement('canvas');canvas.width=this.width;canvas.height=this.height
   const ctx=canvas.getContext('2d'),[left,bottom,right,top]=this.extent
   const draw=(zoom,{tile,coord},masked)=>{
@@ -103,7 +129,7 @@ export class AssembledZoomTile extends Tile {
   // paths at a projection cut cannot leave transparent holes in the tile.
   if(ordered.length){const lowest=ordered[0].zoom;for(const parent of ordered)if(parent.zoom===lowest)draw(parent.zoom,parent,false)}
   for(const parent of ordered)if(parent.zoom!==ordered[0].zoom)draw(parent.zoom,parent,true)
-  this.canvas=canvas;this.state=TileState.LOADED;this.changed()
+  this.canvas=canvas
  }
  release(){this.unlisten();this.parents.clear();this.canvas=null;super.release()}
 }
@@ -115,7 +141,7 @@ export {AssembledZoomTile as AssembledSourceTile}
 // otherwise unchanged ReprojTile. Both caches are local to one tile source.
 export class SourceTileAssembler {
  constructor(source,{maxParents=128,maxAssembled=64}={}){this.source=source;this.parents=new TilePool(maxParents);this.assembled=new TilePool(maxAssembled)}
- getTile(z,x,y,pixelRatio,projection,{spans,reference,steps=4,zoomForBand=null,zoomLookup=null,minimumZoom=z,maximumZoom=minimumZoom+2,original,cacheKey}){
+ getTile(z,x,y,pixelRatio,projection,{spans,complete=true,reference,steps=4,zoomForBand=null,zoomLookup=null,minimumZoom=z,maximumZoom=minimumZoom+2,original,cacheKey,parentCacheKey=cacheKey}){
   const source=this.source,grid=source.getTileGridForProjection(projection),coord=[z,x,y]
   if(source.getGutter()!==0)return original.call(source,z,x,y,pixelRatio,projection)
   const normalized=source.getTileCoordForTileUrlFunction(coord,projection)
@@ -129,7 +155,7 @@ export class SourceTileAssembler {
    const min=grid.getMinZoom(),spanCount=ArrayBuffer.isView(spans)?spans.length/4:spans.length,painted=new Int32Array(spanCount*4),counts=new Map()
    let i=0
    eachBandSpan(spans,(x,y,w,band)=>{const lookupIndex=band-(zoomLookup?.minBand??0),desired=zoomLookup&&lookupIndex>=0&&lookupIndex<zoomLookup.zooms.length?zoomLookup.zooms[lookupIndex]:zoomForBand?zoomForBand(band):reference-Math.round(band/steps),zoom=Math.max(min,minimumZoom,Math.min(grid.getMaxZoom(),maximumZoom,desired));painted[i]=x;painted[i+1]=y;painted[i+2]=w;painted[i+3]=zoom;counts.set(zoom,(counts.get(zoom)||0)+w);i+=4})
-   let levels=[...counts.keys()].sort((a,b)=>a-b)
+   let levels=complete?[...counts.keys()].sort((a,b)=>a-b):[]
    if(levels.length>3){
     let best=levels[0],weight=-1
     for(const low of levels){let sum=0;for(let candidate=low;candidate<low+3;candidate++)sum+=counts.get(candidate)||0;if(sum>weight){weight=sum;best=low}}
@@ -137,19 +163,20 @@ export class SourceTileAssembler {
     levels=[...counts.keys()].sort((a,b)=>a-b)
    }
    const parents=new Map(),fallbackZoom=Math.min(z,minimumZoom)
-   for(const zoom of [...new Set([fallbackZoom,...levels])]){
+   const requestedZooms=complete?[fallbackZoom,z,...levels]:[z]
+   for(const zoom of [...new Set(requestedZooms)]){
     const range=grid.getTileRangeForExtentAndZ(extent,zoom)
-    if((range.maxX-range.minX+1)*(range.maxY-range.minY+1)>16)return this.parent(z,normalized[1],normalized[2],pixelRatio,projection,original,cacheKey)
+    if((range.maxX-range.minX+1)*(range.maxY-range.minY+1)>16)return this.parent(z,normalized[1],normalized[2],pixelRatio,projection,original,parentCacheKey)
     for(let px=range.minX;px<=range.maxX;px++)for(let py=range.minY;py<=range.maxY;py++){
      const parentCoord=[zoom,px,py]
-     parents.set(`${zoom}/${px}/${py}`,{zoom,coord:parentCoord,tile:this.parent(zoom,px,py,pixelRatio,projection,original,cacheKey)})
+     parents.set(`${zoom}/${px}/${py}`,{zoom,coord:parentCoord,tile:this.parent(zoom,px,py,pixelRatio,projection,original,parentCacheKey)})
     }
    }
-   const fallback=fallbackZoom>min?()=>{
+   const fallback=complete&&fallbackZoom>min?()=>{
     const zoom=fallbackZoom-1,parentCoord=grid.getTileCoordForCoordAndZ([(extent[0]+extent[2])/2,(extent[1]+extent[3])/2],zoom)
-    return {zoom,coord:parentCoord,tile:this.parent(zoom,parentCoord[1],parentCoord[2],pixelRatio,projection,original,cacheKey)}
+    return {zoom,coord:parentCoord,tile:this.parent(zoom,parentCoord[1],parentCoord[2],pixelRatio,projection,original,parentCacheKey)}
    }:null
-   const tile=new AssembledZoomTile(coord,parents,painted,extent,grid,width,height,source.tileOptions,fallback);tile.key=source.getKey();return tile
+   const tile=new AssembledZoomTile(coord,parents,painted,extent,grid,width,height,source.tileOptions,fallback,z);tile.key=source.getKey();return tile
   })
  }
  parent(z,x,y,pixelRatio,projection,original,cacheKey){

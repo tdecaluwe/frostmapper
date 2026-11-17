@@ -3,11 +3,11 @@
 export class ContourAtlasIndex {
  constructor(data,{indexSize=32}={}){
   if(![1,2,3].includes(data.version)||!Array.isArray(data.extent)||!Array.isArray(data.paths))throw Error('Invalid contour atlas')
-  this.data=data;this.indexSize=indexSize;this.cells=new Map();this.segments=[]
+  this.data=data;this.steps=data.steps??(data.paths.some(path=>path.step===undefined&&path.quarter!==undefined)?4:1);this.indexSize=indexSize;this.cells=new Map();this.segments=[]
   for(const path of data.paths)for(let index=0;index<path.curves.length;index++){
    const curve=path.curves[index]
    const xs=[curve[0],curve[2],curve[4],curve[6]],ys=[curve[1],curve[3],curve[5],curve[7]]
-   const step=path.step??(data.steps?path.quarter:(path.quarter??0)/4),level=step/(data.steps||1)
+   const step=path.step??(path.quarter===undefined?0:(this.steps===4?path.quarter:path.quarter/4)),level=step/this.steps
    const oriented=path.orientations?path.orientations[index]===true:path.orientation==='high-left'
    const segment={step,level,curve,oriented,bounds:[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]},id=this.segments.push(segment)-1
    const [x0,y0,x1,y1]=this.cellRange(segment.bounds)

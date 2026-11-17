@@ -1,10 +1,10 @@
-// Cache contour masks prepared off-thread. Partial row batches are available
-// to renderers while the worker continues planning the rest of a tile.
+// Cache contour masks prepared off-thread. Keep partial row batches private
+// until a whole tile mask is complete, then refresh sources in a short batch.
 export class ContourPlanClient {
- constructor({cacheSize=8192,refreshDelay=16}={}){
-  this.cache=new Map();this.completed=new Set();this.pending=new Set();this.jobs=new Map();this.records=new Map();this.atlases=new Set();this.sources=new Set();this.waiters=[];this.cacheSize=cacheSize;this.refreshDelay=refreshDelay;this.revision=0;this.timer=null;this.pumpTimer=null
+ constructor({cacheSize=8192,refreshDelay=64}={}){
+  this.cache=new Map();this.completed=new Set();this.pending=new Set();this.jobs=new Map();this.records=new Map();this.atlases=new Set();this.sources=new Set();this.waiters=[];this.cacheSize=cacheSize;this.refreshDelay=refreshDelay;this.revision=0;this.completeRevision=0;this.timer=null;this.pumpTimer=null
   try{
-   this.worker=new Worker(new URL('./contour-plan-worker.js?v=oriented-mask-v3',import.meta.url),{type:'module'})
+   this.worker=new Worker(new URL('./contour-plan-worker.js?v=progressive-reproj-v1',import.meta.url),{type:'module'})
    this.worker.onmessage=event=>this.receive(event.data)
    this.worker.onerror=()=>this.fail()
   }catch{this.worker=null}
@@ -49,13 +49,12 @@ export class ContourPlanClient {
     if(++count>=24)break
    }
    if(this.jobs.size)this.schedulePump()
-   if(!this.pending.size)this.scheduleRefresh()
   },0)
  }
  scheduleRefresh(){
   if(this.timer!==null)return
   this.timer=setTimeout(()=>{
-   this.timer=null;this.revision++
+   this.timer=null;this.revision++;this.completeRevision++
    const sources=[...this.sources];this.sources.clear()
    for(const source of sources)source.changed()
    if(!this.pending.size&&!this.jobs.size){for(const resolve of this.waiters)resolve();this.waiters=[]}
@@ -67,14 +66,12 @@ export class ContourPlanClient {
    const record=this.records.get(message.key)
    if(!record)return
    this.appendPartial(record,message.spans)
-   if(!record.parent)this.scheduleRefresh()
    return
   }
   if(message.type==='split'){
    const record=this.records.get(message.key),children=record?.makeChildren?.()
    if(!record||record.depth>=4||!children?.length){this.finish(message.key,this.partialSpans(record),false);return}
    record.partialPacked=new Int32Array(0);record.partialLength=0
-   if(!record.parent)this.scheduleRefresh()
    record.children=new Array(children.length);record.offsets=children.map(child=>child.offset);record.remaining=children.length;record.failed=false
    for(let i=0;i<children.length;i++){
     const child=children[i],childKey=`${message.key}/split-${i}`
@@ -115,7 +112,7 @@ export class ContourPlanClient {
      this.appendPartial(parent,translated)
     }else if(!parent.parent&&spans){
      const translated=this.translate(spans,record.offset)
-     this.appendPartial(parent,translated);this.scheduleRefresh()
+     this.appendPartial(parent,translated)
     }
    }
    return
@@ -154,7 +151,7 @@ export class ContourPlanClient {
   this.worker.terminate();this.worker=null;this.jobs.clear();this.records.clear();clearTimeout(this.pumpTimer);this.pumpTimer=null
   for(const key of this.pending){this.cache.set(key,null);this.completed.delete(key)}
   this.pending.clear()
-  clearTimeout(this.timer);this.timer=null
+  clearTimeout(this.timer);this.timer=null;this.revision++;this.completeRevision++
   const sources=[...this.sources];this.sources.clear()
   for(const source of sources)source.changed()
   for(const resolve of this.waiters)resolve();this.waiters=[]

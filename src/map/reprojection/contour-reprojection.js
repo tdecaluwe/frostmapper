@@ -1,8 +1,9 @@
 import {equivalent} from 'ol/proj.js'
 import {wrapAndSliceX} from 'ol/extent.js'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
-import {ContourPlanClient} from './contour-plan-client.js?v=oriented-mask-v3'
-import {SourceTileAssembler} from './source-assembler.js?v=worker-plans-r7'
+import {ContourPlanClient} from './contour-plan-client.js?v=progressive-reproj-v1'
+import {SourceTileAssembler} from './source-assembler.js?v=progressive-reproj-v1'
+import {enableProgressiveReprojection} from './progressive-reproj-tile.js?v=progressive-reproj-v1'
 import {ZoomLevelSupervisor} from './zoom-level-supervisor.js?v=supervisor-v5'
 
 function eachSpan(spans,callback){
@@ -84,7 +85,7 @@ export class ContourReprojection {
   this.sources.add(source);const original=source.getTile,originalKey=source.getKey,manager=this
   const originalInternal=source.getTileInternal
   const assembler=new SourceTileAssembler(source);this.assemblers.set(source,assembler)
-  source.getKey=function(){const sourceCode=this.getProjection()?.getCode();return `${originalKey.call(this)}|bands:${manager.signature}|atlas:${manager.zoomSupervisor.getRevision(manager.signature,sourceCode,'source')}|${manager.zoomSupervisor.getAtlas(manager.signature,sourceCode,'source')?'ready':'pending'}|plans:${manager.planWorker.revision}`}
+  source.getKey=function(){const sourceCode=this.getProjection()?.getCode();return `${originalKey.call(this)}|bands:${manager.signature}|atlas:${manager.zoomSupervisor.getRevision(manager.signature,sourceCode,'source')}|${manager.zoomSupervisor.getAtlas(manager.signature,sourceCode,'source')?'ready':'pending'}|plans:${manager.planWorker.completeRevision}`}
   source.getTile=function(z,x,y,pixelRatio,target){
    const src=this.getProjection(),atlas=target&&manager.zoomSupervisor.getAtlas(target.getCode(),src?.getCode(),'source')
    if(!atlas||!src||equivalent(src,target))return original.call(this,z,x,y,pixelRatio,target)
@@ -92,7 +93,7 @@ export class ContourReprojection {
    const coord=this.getTileCoordForTileUrlFunction([z,x,y],target)
    if(!coord)return original.call(this,z,x,y,pixelRatio,target)
    const reference=Math.round(Math.log2(sourceGrid.getResolution(0)/targetGrid.getResolution(z)))
-   const steps=atlas.steps||1,minimumStep=(reference-sourceGrid.getMaxZoom())*steps,selection={},zoomLookup=manager.zoomSupervisor.sourceZoomLookup(target.getCode(),src.getCode(),z,reference,sourceGrid.getMinZoom(),sourceGrid.getMaxZoom(),atlas.minStep??atlas.minQuarter??-80,atlas.maxStep??atlas.maxQuarter??80,steps)
+   const steps=atlas.steps||manager.zoomSupervisor.steps||1,minimumStep=(reference-sourceGrid.getMaxZoom())*steps,selection={},zoomLookup=manager.zoomSupervisor.sourceZoomLookup(target.getCode(),src.getCode(),z,reference,sourceGrid.getMinZoom(),sourceGrid.getMaxZoom(),atlas.minStep??atlas.minQuarter??-80,atlas.maxStep??atlas.maxQuarter??80,steps)
    const selectZoom=sourceExtent=>{
    const result=manager.footprintPlan(this,target.getCode(),z,coord,sourceExtent,reference,minimumStep,steps)
     if(!result)return undefined
@@ -106,9 +107,9 @@ export class ContourReprojection {
     const sourceExtent=sourceGrid.getTileCoordExtent(sourceCoord),sourceSize=sourceGrid.getTileSize(sourceZ),sourceWidth=typeof sourceSize==='number'?sourceSize:sourceSize[0],sourceHeight=typeof sourceSize==='number'?sourceSize:sourceSize[1],maximumZoom=selection.maximumZoom,sourceMinimumStep=(reference-maximumZoom)*steps,sourceKey=`${sourceZ}/${sourceCoord[1]}/${sourceCoord[2]}/${sourceWidth}/${sourceHeight}/s${sourceMinimumStep}`
     const sourcePlan=manager.sourcePlan(this,target.getCode(),sourceKey,sourceExtent,sourceWidth,sourceHeight,sourceMinimumStep)
     if(!sourcePlan.ready||!sourcePlan.spans)return originalInternal.call(this,sourceZ,sourceX,sourceY,ratio,projection)
-    return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{spans:sourcePlan.spans,reference,steps,zoomLookup,minimumZoom:selection.lowest,maximumZoom,original:originalInternal,cacheKey:this.getKey()})
+    return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{spans:sourcePlan.spans,complete:sourcePlan.complete,reference,steps,zoomLookup,minimumZoom:selection.lowest,maximumZoom,original:originalInternal,cacheKey:this.getKey(),parentCacheKey:originalKey.call(this)})
    }
-   try{return this.getTileAtSourceZoom(z,x,y,pixelRatio,target,undefined,undefined,undefined,selectZoom)}finally{if(own)this.getTileInternal=originalInternal;else delete this.getTileInternal}
+   try{return enableProgressiveReprojection(this.getTileAtSourceZoom(z,x,y,pixelRatio,target,undefined,undefined,undefined,selectZoom))}finally{if(own)this.getTileInternal=originalInternal;else delete this.getTileInternal}
   }
   this.update()
  }

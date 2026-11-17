@@ -1,7 +1,7 @@
 import '../src/map/projections/index.js?v=grieger-wrap'
 import {get,transform} from 'ol/proj.js'
 import XYZ from 'ol/source/XYZ.js'
-import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=worker-plans-r5'
+import {ContourReprojection} from '../src/map/reprojection/contour-reprojection.js?v=progressive-reproj-v1'
 
 const source=new XYZ({projection:'EPSG:3857'}),sourceProjection=get('EPSG:3857'),result={},errors=[]
 let activeProjection=sourceProjection

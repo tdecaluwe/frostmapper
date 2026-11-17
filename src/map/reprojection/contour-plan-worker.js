@@ -1,5 +1,5 @@
-import {ContourAtlas} from './contour-atlas-index.js?v=oriented-steps-v3'
-import {BandMaskPlanner} from './band-mask.js?v=oriented-mask-v3'
+import {ContourAtlas} from './contour-atlas-index.js?v=progressive-reproj-v1'
+import {BandMaskPlanner} from './band-mask.js?v=progressive-reproj-v1'
 import {get} from '../projections/worker-index.js'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
 

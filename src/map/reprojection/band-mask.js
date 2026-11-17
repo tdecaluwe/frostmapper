@@ -16,7 +16,7 @@ export class BandMaskPlanner {
   if(!anchor||!Number.isFinite(anchor.value)){yield {failed:true};return}
   const [x0,y0,x1,y1]=atlas.data.extent,[left,bottom,right,top]=extent
   const norm=[(left-x0)/(x1-x0),(bottom-y0)/(y1-y0),(right-x0)/(x1-x0),(top-y0)/(y1-y0)]
-  const steps=atlas.data.steps||1,candidates=atlas.query(norm).filter(item=>item.step>=minimumStep),lines=[]
+  const steps=atlas.steps||atlas.data.steps||1,candidates=atlas.query(norm).filter(item=>item.step>=minimumStep),lines=[]
   const uniformBand=Math.floor(anchor.value*steps)
   if(!candidates.length){
    for(let start=0;start<height;start+=rowsPerChunk)yield {spans:this.uniform(width,Math.min(rowsPerChunk,height-start),uniformBand,start)}
