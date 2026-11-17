@@ -1,5 +1,6 @@
 // Absolute CDN URL also lets the atlas generator import this module from a
 // native module worker, where the document's import map is not available.
+import {finiteDifferenceScale} from './finite-difference-scale.js'
 import {transform} from 'https://esm.sh/ol@10.6.1/proj.js'
 
 // Use a central difference where possible and an inward, second-order
@@ -22,10 +23,11 @@ function derivative(sample,point,axis,step,center,unwrap){
 
 // Signed logarithm of the linear source/view scale derived from the Jacobian
 // area. One unit corresponds to one source zoom level.
-export function distortionAt(point,{sample,step=100,sourceWorldWidth=0}){
+export function distortionAt(point,{sample,step=100,sourceWorldWidth=0,adaptive=false}){
  if(!point?.every(Number.isFinite)||!Number.isFinite(step)||step<=0)return null
  const center=sample(point)
  if(!center||!center.every(Number.isFinite))return null
+ if(adaptive)return finiteDifferenceScale(point,{sample:p=>p[0]===point[0]&&p[1]===point[1]?center:sample(p),step,worldWidth:sourceWorldWidth})
  const unwrap=(value,anchor)=>{
   const result=value.slice()
   if(sourceWorldWidth>0)result[0]-=sourceWorldWidth*Math.round((result[0]-anchor[0])/sourceWorldWidth)
@@ -40,7 +42,7 @@ export function distortionAt(point,{sample,step=100,sourceWorldWidth=0}){
 // Reject samples beyond either projection's domain and those that do not
 // round-trip. The latter also avoids treating a projection cut as a smooth
 // field. source extent bounds the source imagery, including Mercator's poles.
-export function projectionDistortion(target,source,point,step=100){
+export function projectionDistortion(target,source,point,step=100,adaptive=false){
  const targetExtent=target.getExtent(),sourceExtent=source.getExtent()
  const targetWidth=target.canWrapX()&&targetExtent?targetExtent[2]-targetExtent[0]:0
  const sourceWidth=source.canWrapX()&&sourceExtent?sourceExtent[2]-sourceExtent[0]:0
@@ -58,25 +60,30 @@ export function projectionDistortion(target,source,point,step=100){
    return result
   }catch{return null}
  }
- return distortionAt(point,{sample,step,sourceWorldWidth:sourceWidth})
+ return distortionAt(point,{sample,step,sourceWorldWidth:sourceWidth,adaptive})
 }
 
 // In source coordinates the Jacobian is the inverse of the target-to-source
 // Jacobian. Sampling the forward transform avoids repeatedly transforming
 // every finite-difference neighbor back and forth through both projections.
-function projectionDistortionFromSource(target,source,point,step=100){
+// Forward-domain mode accepts finite projected coordinates even outside the
+// declared display extent; strict round-trip validation remains available.
+function projectionDistortionFromSource(target,source,point,step=100,adaptive=false,domainPolicy='roundtrip'){
  if(!point?.every(Number.isFinite)||!Number.isFinite(step)||step<=0)return null
  const sourceExtent=source.getExtent(),targetExtent=target.getExtent(),sourceWidth=source.canWrapX()&&sourceExtent?sourceExtent[2]-sourceExtent[0]:0,targetWidth=target.canWrapX()&&targetExtent?targetExtent[2]-targetExtent[0]:0
  const inside=(coordinate,extent,worldWidth)=>!extent||coordinate[1]>=extent[1]&&coordinate[1]<=extent[3]&&(worldWidth>0||coordinate[0]>=extent[0]&&coordinate[0]<=extent[2])
  if(!inside(point,sourceExtent,sourceWidth))return null
  try{
   const center=transform(point,source,target)
-  if(!center.every(Number.isFinite)||!inside(center,targetExtent,targetWidth))return null
+  if(!center.every(Number.isFinite))return null
+  if(domainPolicy==='roundtrip'){
+  if(!inside(center,targetExtent,targetWidth))return null
   const back=transform(center,target,source)
   if(!back.every(Number.isFinite))return null
   let dx=back[0]-point[0]
   if(sourceWidth)dx-=sourceWidth*Math.round(dx/sourceWidth)
   if(Math.hypot(dx,back[1]-point[1])>Math.max(1,step*.01))return null
+  }
   const sample=coordinate=>{
    // distortionAt samples the center again before taking its finite
    // differences. Reuse the already validated projection result instead of
@@ -84,9 +91,9 @@ function projectionDistortionFromSource(target,source,point,step=100){
    if(coordinate[0]===point[0]&&coordinate[1]===point[1])return center
    if(!inside(coordinate,sourceExtent,sourceWidth))return null
    const result=transform(coordinate,source,target)
-   return result.every(Number.isFinite)&&inside(result,targetExtent,targetWidth)?result:null
+   return result.every(Number.isFinite)&&(domainPolicy==='forward'||inside(result,targetExtent,targetWidth))?result:null
   }
-  const value=distortionAt(point,{sample,step,sourceWorldWidth:targetWidth})
+  const value=distortionAt(point,{sample,step,sourceWorldWidth:targetWidth,adaptive})
   return value===null?null:-value
  }catch{return null}
 }
@@ -94,9 +101,9 @@ function projectionDistortionFromSource(target,source,point,step=100){
 // Projection-pair data is independent of the viewport and can be shared by
 // layers that use the same source coordinate system.
 export class DistortionField {
- constructor(target,source,{step=100}={}){this.target=target;this.source=source;this.step=step}
- at(point){return projectionDistortion(this.target,this.source,point,this.step)}
+ constructor(target,source,{step=100,adaptive=false,domainPolicy='roundtrip'}={}){if(!['forward','roundtrip'].includes(domainPolicy))throw Error('Invalid source domain policy');this.target=target;this.source=source;this.step=step;this.adaptive=adaptive;this.domainPolicy=domainPolicy}
+ at(point){return projectionDistortion(this.target,this.source,point,this.step,this.adaptive)}
  atSource(point){
-  return projectionDistortionFromSource(this.target,this.source,point,this.step)
+  return projectionDistortionFromSource(this.target,this.source,point,this.step,this.adaptive,this.domainPolicy)
  }
 }

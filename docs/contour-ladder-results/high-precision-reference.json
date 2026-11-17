@@ -1,0 +1,14 @@
+{
+  "precisionDigits": 60,
+  "samples": 80,
+  "maxErrorSteps": 0.11958052947765352,
+  "overHalfStep": 0,
+  "worst": {
+    "step": -80,
+    "point": [
+      5.16943136197012e-14,
+      0.6402749630848785
+    ],
+    "errorSteps": 0.11958052947765352
+  }
+}

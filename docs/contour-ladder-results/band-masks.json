@@ -1,0 +1,86 @@
+[
+  {
+    "u": 0.25,
+    "zoom": 6,
+    "checked": 282,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0.25,
+    "zoom": 10,
+    "checked": 282,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0.25,
+    "zoom": 16,
+    "checked": 282,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0.25,
+    "zoom": 20,
+    "checked": 282,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0.5,
+    "zoom": 6,
+    "checked": 279,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0.5,
+    "zoom": 10,
+    "checked": 279,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0.5,
+    "zoom": 16,
+    "checked": 282,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0.5,
+    "zoom": 20,
+    "checked": 282,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0,
+    "zoom": 6,
+    "checked": 285,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0,
+    "zoom": 10,
+    "checked": 284,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0,
+    "zoom": 16,
+    "checked": 285,
+    "wrong": 0,
+    "failed": false
+  },
+  {
+    "u": 0,
+    "zoom": 20,
+    "checked": 285,
+    "wrong": 0,
+    "failed": false
+  }
+]

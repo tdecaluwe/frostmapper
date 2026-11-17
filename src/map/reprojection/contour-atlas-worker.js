@@ -1,6 +1,6 @@
 import {get,PROJECTION_STRINGS} from '../projections/worker-index.js'
 import {MAX_SOURCE_ZOOM} from './contour-atlas-config.js'
-import {ContourAtlas} from './contour-atlas-builder.js?v=atlas-builder-oriented-v5'
+import {BoundedProjectionContourAtlas} from './bounded-contour-atlas-builder.js?v=visibility-v1'
 
 self.addEventListener('message',event=>{
  const message=event.data
@@ -23,7 +23,7 @@ async function build(message){
    return atlas
   }
   const publish=(type,stage,atlas)=>self.postMessage({type,stage,id:message.id,data:metadata(atlas)})
-  atlas=new ContourAtlas(target,source,options)
+  atlas=new BoundedProjectionContourAtlas(target,source,options)
   let data=atlas.data
   publish('update',atlas.stage,data)
   while(!atlas.complete){

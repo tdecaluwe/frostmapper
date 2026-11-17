@@ -1,0 +1,23 @@
+{
+  "measurement": "post-GC retained state, atlas output excluded",
+  "results": [
+    {
+      "stage": "coarse",
+      "arrayBufferBytes": 3244032,
+      "heapBytes": 541264,
+      "liveIntermediateBytes": 3785296
+    },
+    {
+      "stage": "medium",
+      "arrayBufferBytes": 3244032,
+      "heapBytes": 571136,
+      "liveIntermediateBytes": 3815168
+    },
+    {
+      "stage": "fine",
+      "arrayBufferBytes": 0,
+      "heapBytes": 448408,
+      "liveIntermediateBytes": 448408
+    }
+  ]
+}
