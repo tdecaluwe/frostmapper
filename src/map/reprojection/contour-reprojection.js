@@ -1,3 +1,5 @@
+import {StepTileGrid} from './step-tile-grid.js'
+import {StepTilePool} from './step-tile.js'
 import {equivalent} from 'ol/proj.js'
 import {wrapAndSliceX} from 'ol/extent.js'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
@@ -84,7 +86,15 @@ export class ContourReprojection {
   if(this.sources.has(source))return
   this.sources.add(source);const original=source.getTile,originalKey=source.getKey,manager=this
   const originalInternal=source.getTileInternal
+  const stepTiles=new StepTilePool(),stepGrids=new Map()
   const assembler=new SourceTileAssembler(source);this.assemblers.set(source,assembler)
+  const originalGrid=source.getTileGridForProjection.bind(source)
+  source.getTileGridForProjection=function(projection){
+   if(equivalent(this.getProjection(),projection))return originalGrid(projection)
+   const code=projection.getCode()
+   if(!stepGrids.has(code))stepGrids.set(code,new StepTileGrid(originalGrid(projection),manager.zoomSupervisor.steps))
+   return stepGrids.get(code)
+  }
   source.getKey=function(){const sourceCode=this.getProjection()?.getCode();return `${originalKey.call(this)}|bands:${manager.signature}|atlas:${manager.zoomSupervisor.getRevision(manager.signature,sourceCode,'source')}|${manager.zoomSupervisor.getAtlas(manager.signature,sourceCode,'source')?'ready':'pending'}|plans:${manager.planWorker.completeRevision}`}
   source.getTile=function(z,x,y,pixelRatio,target){
    const src=this.getProjection(),atlas=target&&manager.zoomSupervisor.getAtlas(target.getCode(),src?.getCode(),'source')
@@ -92,7 +102,7 @@ export class ContourReprojection {
    const sourceGrid=this.getTileGridForProjection(src),targetGrid=this.getTileGridForProjection(target)
    const coord=this.getTileCoordForTileUrlFunction([z,x,y],target)
    if(!coord)return original.call(this,z,x,y,pixelRatio,target)
-   const reference=Math.round(Math.log2(sourceGrid.getResolution(0)/targetGrid.getResolution(z)))
+   const reference=Math.log2(sourceGrid.getResolution(0)/targetGrid.getResolution(z))+(targetGrid.phase?.(z)||0)
    const steps=atlas.steps||manager.zoomSupervisor.steps||1,minimumStep=(reference-sourceGrid.getMaxZoom())*steps,selection={},zoomLookup=manager.zoomSupervisor.sourceZoomLookup(target.getCode(),src.getCode(),z,reference,sourceGrid.getMinZoom(),sourceGrid.getMaxZoom(),atlas.minStep??atlas.minQuarter??-80,atlas.maxStep??atlas.maxQuarter??80,steps)
    const selectZoom=sourceExtent=>{
    const result=manager.footprintPlan(this,target.getCode(),z,coord,sourceExtent,reference,minimumStep,steps)
@@ -109,7 +119,11 @@ export class ContourReprojection {
     if(!sourcePlan.ready||!sourcePlan.spans)return originalInternal.call(this,sourceZ,sourceX,sourceY,ratio,projection)
     return assembler.getTile(sourceZ,sourceX,sourceY,ratio,projection,{spans:sourcePlan.spans,complete:sourcePlan.complete,reference,steps,zoomLookup,minimumZoom:selection.lowest,maximumZoom,original:originalInternal,cacheKey:this.getKey(),parentCacheKey:originalKey.call(this)})
    }
-   try{return enableProgressiveReprojection(this.getTileAtSourceZoom(z,x,y,pixelRatio,target,undefined,undefined,undefined,selectZoom))}finally{if(own)this.getTileInternal=originalInternal;else delete this.getTileInternal}
+   try{
+    const tile=enableProgressiveReprojection(this.getTileAtSourceZoom(z,x,y,pixelRatio,target,undefined,undefined,undefined,selectZoom))
+    const spatialKey=[target.getCode(),this.getKey(),Math.floor(z/steps),x,y,pixelRatio].join('|')
+    return stepTiles.wrap(tile,[z,x,y],this.getKey(),spatialKey)
+   }finally{if(own)this.getTileInternal=originalInternal;else delete this.getTileInternal}
   }
   this.update()
  }

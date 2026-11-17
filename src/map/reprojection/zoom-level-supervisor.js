@@ -51,17 +51,17 @@ export class ZoomLevelSupervisor {
  zoomCorrectionForBand(band,steps=this.steps){return Math.round(band/steps)}
  sourceZoomForBand(targetCode,sourceCode,targetZoom,reference,band,minimum,maximum,steps=this.steps){
   const fixedReference=this.referenceFor(targetCode,sourceCode,targetZoom,reference)
-  return Math.max(minimum,Math.min(maximum,fixedReference-this.zoomCorrectionForBand(band,steps)))
+  return Math.max(minimum,Math.min(maximum,Math.round(fixedReference-band/steps)))
  }
  sourceZoomBoundsForBands(targetCode,sourceCode,targetZoom,reference,minBand,maxBand,minimum,maximum,steps=this.steps){
-  const fixedReference=this.referenceFor(targetCode,sourceCode,targetZoom,reference),low=Math.max(minimum,Math.min(maximum,fixedReference-this.zoomCorrectionForBand(maxBand,steps))),high=Math.max(minimum,Math.min(maximum,fixedReference-this.zoomCorrectionForBand(minBand,steps)))
+  const fixedReference=this.referenceFor(targetCode,sourceCode,targetZoom,reference),low=Math.max(minimum,Math.min(maximum,Math.round(fixedReference-maxBand/steps))),high=Math.max(minimum,Math.min(maximum,Math.round(fixedReference-minBand/steps)))
   return {minimum:Math.min(low,high),maximum:Math.max(low,high)}
  }
  sourceZoomLookup(targetCode,sourceCode,targetZoom,reference,minimum,maximum,minBand,maxBand,steps=this.steps){
   const entry=this.register(targetCode,sourceCode,'source'),fixedReference=this.referenceFor(targetCode,sourceCode,targetZoom,reference),key=[targetZoom,fixedReference,minimum,maximum,minBand,maxBand,steps].join('/');let lookup=entry.zoomLookups.get(key)
   if(!lookup){
    const zooms=new Int16Array(maxBand-minBand+1)
-   for(let band=minBand;band<=maxBand;band++)zooms[band-minBand]=Math.max(minimum,Math.min(maximum,fixedReference-this.zoomCorrectionForBand(band,steps)))
+   for(let band=minBand;band<=maxBand;band++)zooms[band-minBand]=Math.max(minimum,Math.min(maximum,Math.round(fixedReference-band/steps)))
    lookup={minBand,maxBand,zooms};entry.zoomLookups.set(key,lookup)
   }
   return lookup
