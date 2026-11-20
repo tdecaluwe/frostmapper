@@ -39,3 +39,6 @@ document.querySelector('#projection').addEventListener('change',event=>{
   selector.value=previous;status.textContent=error.message;status.hidden=false
  }
 })
+
+import {addSteepnessLayer} from './map/layers/steepness.js'
+addSteepnessLayer(map,contourReprojection)
