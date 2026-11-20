@@ -44,3 +44,6 @@ document.querySelector('#projection').addEventListener('change',event=>{
 
 import {addSteepnessLayer} from './map/layers/steepness.js?v=palette-v2'
 addSteepnessLayer(map,contourReprojection)
+
+import {addSkiTrek} from './map/layers/ski-trek.js?v=trek-v1'
+addSkiTrek(map)

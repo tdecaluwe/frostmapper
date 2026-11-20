@@ -48,3 +48,11 @@ aside{position:absolute;right:max(.6rem,env(safe-area-inset-right));top:max(.6re
 #navigation button{border-radius:0;}
 #navigation .ol-attribution ul{left:auto;right:100%;top:0;margin:0 .4rem 0 0;max-width:calc(100vw - 4rem);max-height:calc(100dvh - 1.2rem);}
 @media(pointer:coarse){#navigation #map-options summary{width:44px;height:44px;}}
+
+.trek-row{display:flex;align-items:center;justify-content:space-between;gap:.3rem;}
+#navigation .trek-row button{width:28px;height:28px;font-size:19px;border-radius:.2rem;}
+#navigation .trek-details-toggle{width:auto;height:24px;font:11px system-ui;color:#35647a;text-decoration:underline;}
+#navigation .trek-leg{width:100%;height:auto;min-height:36px;padding:.35rem .15rem;text-align:left;white-space:normal;font:11px/1.4 system-ui;border-bottom:1px solid #e1e7e9;}
+#trek-legs{padding-bottom:.3rem;}
+#trek-legs small{display:block;font-size:10px;margin-top:.3rem;color:#56646b;}
+#trek-legs a{display:inline-block;font-size:11px;padding:.4rem 0;color:#35647a;}
