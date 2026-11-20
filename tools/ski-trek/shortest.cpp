@@ -8,7 +8,7 @@ using namespace std;
 struct Node{double f,d;int i;bool operator<(const Node& b)const{return f>b.f;}};
 int main(int argc,char**argv){
  int H=atoi(argv[1]),W=atoi(argv[2]),sr=atoi(argv[3]),sc=atoi(argv[4]),tr=atoi(argv[5]),tc=atoi(argv[6]),limit=atoi(argv[7]);
- vector<unsigned short>s(H*W);ifstream("slope.bin",ios::binary).read((char*)s.data(),s.size()*2);
+ vector<unsigned short>s(H*W);ifstream(argc>10?argv[10]:"slope.bin",ios::binary).read((char*)s.data(),s.size()*2);
  vector<double> spacing(H);ifstream("spacing.bin",ios::binary).read((char*)spacing.data(),H*8);
  double maxDistance=argc>9?atof(argv[9]):1e100;
  double ms=spacing[0];for(auto a:spacing)ms=min(ms,a);

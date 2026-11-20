@@ -90,3 +90,36 @@ intervals. Distance counts continuously across hut stops, using geographic
 ground distance independently of the display projection. Splitting happens
 once when the track loads. The final return leg overlaps day 5; selecting day 6
 in the daily-leg controls switches that shared section to day 6's distance phase.
+
+## Different return from Tjønnebu
+
+The original six-day GPX remains unchanged. `return_alternative` in
+`route.geojson` supplies an optional day 6 for a loop rather than retracing
+outbound day 5. Enable **Different return** under **6 daily legs**, or add
+`return=alternative` to the map URL. The map then shows both corridors and
+its GPX link selects `tafjord-ski-trek-distinct-return.gpx`.
+`return-alternative.gpx` contains the alternative leg alone.
+
+The alternative search excludes a 500 m corridor around the outbound raster
+track, except within 1.5 km of either hut. This explicit separation requirement
+prevents the solver from choosing a nearby parallel version of the same track.
+Distances for the exclusion use a latitude-corrected raster distance field.
+At the same 0.1° threshold precision, the least maximum slope meeting this
+constraint is 26.8°. Its shortest track is 12.905 km, approximately +901 / −1,014 m,
+reaching about 1,631 m elevation. The baseline return is 12.928 km, 15.5°,
+approximately +423 / −535 m, reaching about 1,198 m.
+
+The 18 km and 25 km caps give the same optimum for this 500 m separation.
+Every path cell and diagonal gate was independently checked against the slope
+and exclusion masks. At 26.7° there is no qualifying track of at most 25 km.
+
+For comparison, requiring 1,000 m separation gives 17.865 km at 29.9° within
+18 km, or 24.461 km at 29.7° within 25 km. Those larger-detour candidates are
+retained in the analysis output rather than added to the map.
+
+After the main calculation, reproduce the return search and export with:
+
+```sh
+python3 tools/ski-trek/alternative-return.py /tmp/tafjord-analysis
+python3 tools/ski-trek/export-alternative.py /tmp/tafjord-analysis data/ski-trek
+```
