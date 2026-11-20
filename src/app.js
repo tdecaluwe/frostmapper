@@ -1,4 +1,4 @@
-import {attachNavigation} from './map/controls/navigation.js'
+import {attachNavigation} from './map/controls/navigation.js?v=edge-controls-v1'
 import './map/projections/index.js?v=grieger-wrap'
 import Map from 'ol/Map.js'
 import {defaults as defaultInteractions} from 'ol/interaction/defaults.js'

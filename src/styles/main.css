@@ -36,3 +36,15 @@ aside{position:absolute;right:max(.6rem,env(safe-area-inset-right));top:max(.6re
 .slope-legend small{flex-basis:100%;font-size:10px;color:#56646b}
 .slope-legend .slope-status{color:#8a2600}
 @media(pointer:coarse){#map-options summary,#navigation button{width:44px;height:44px}#layers label{min-height:36px}}
+
+/* One continuous control strip at the screen edge. Popovers open inward. */
+#navigation{left:auto;right:0;top:0;flex-direction:column;align-items:stretch;border-radius:0;}
+#navigation aside{position:static;z-index:auto;}
+#navigation #map-options summary{width:36px;height:36px;margin:0;border-radius:0;box-shadow:none;background:transparent;}
+#navigation #map-options summary:hover,#navigation #map-options[open] summary{background:#e8edef;}
+#navigation .options-content{position:absolute;top:0;right:100%;margin:0 .4rem 0 0;max-width:calc(100vw - 4rem);max-height:calc(100dvh - 1.2rem);}
+#navigation .ol-control{flex-direction:column;}
+#navigation .ol-control+.ol-control,#navigation aside+.ol-control{border-left:0;border-top:1px solid #dce3e6;}
+#navigation button{border-radius:0;}
+#navigation .ol-attribution ul{left:auto;right:100%;top:0;margin:0 .4rem 0 0;max-width:calc(100vw - 4rem);max-height:calc(100dvh - 1.2rem);}
+@media(pointer:coarse){#navigation #map-options summary{width:44px;height:44px;}}
