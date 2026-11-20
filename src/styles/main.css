@@ -1,8 +1,38 @@
-html,body,#map{width:100%;height:100%;margin:0}body{font:14px system-ui,sans-serif}#map{position:absolute;inset:0;background:#dce6e9}aside{position:absolute;right:1rem;top:1rem;background:#fffe;padding:1rem;border-radius:.6rem;box-shadow:0 2px 12px #0003;display:grid;gap:.6rem;max-width:45vw}aside strong{font-size:1.1rem}aside label{display:block}#layers label{display:block;margin:.35rem 0}#scale{position:absolute;bottom:2rem;left:.75rem;background:#fffe;padding:.35rem;border-radius:.2rem}#scale-bar{height:5px;border:solid #222;border-width:0 1px 2px}#scale-label{font-size:12px}.ol-attribution{max-width:70%}
-
-/* Let OpenLayers handle map gestures instead of browser panning. */
+html,body,#map{width:100%;height:100%;margin:0}
+body{font:13px system-ui,sans-serif;color:#20272b}
+#map{position:absolute;inset:0;background:#dce6e9}
 #map .ol-viewport{touch-action:none}
-
-#projection-status{margin:0;color:#8a2600;max-width:20rem}
-
-.slope-legend{max-width:17rem;display:flex;flex-wrap:wrap;gap:.3rem .6rem;font-size:12px}.slope-legend[hidden]{display:none}.slope-legend span{display:flex;align-items:center;gap:.25rem}.slope-legend i{display:inline-block;width:1rem;height:.7rem}.slope-legend small{flex-basis:100%}.slope-status{color:#8a2600}
+aside{position:absolute;right:max(.6rem,env(safe-area-inset-right));top:max(.6rem,env(safe-area-inset-top));z-index:2}
+#map-options{border-radius:.4rem}
+#map-options summary{list-style:none;display:flex;align-items:center;justify-content:center;width:36px;height:36px;cursor:pointer;margin-left:auto;border-radius:.4rem;background:#fffffff2;box-shadow:0 1px 6px #0003}
+#map-options summary::-webkit-details-marker{display:none}
+#map-options summary:hover,#map-options[open] summary{background:#e8edef}
+#map-options summary:focus-visible,#navigation button:focus-visible{outline:2px solid #15789c;outline-offset:2px}
+.options-content{margin-top:.4rem;background:#fffffff2;border-radius:.4rem;box-shadow:0 1px 6px #0003;padding:.35rem .6rem .6rem;width:210px;max-width:calc(100vw - 3rem);max-height:calc(100dvh - 6rem);overflow:auto}
+.options-content>label{display:block;font-size:11px;color:#56646b;margin-bottom:.2rem}
+#projection{box-sizing:border-box;width:100%;font:inherit;padding:.25rem;border:1px solid #bfc9cd;border-radius:.2rem;background:white;color:inherit}
+#projection-status{margin:.3rem 0;color:#8a2600;font-size:12px}
+#layers{margin-top:.35rem}
+#layers label{display:flex;align-items:center;gap:.3rem;min-height:28px;cursor:pointer}
+#layers input{margin:0;accent-color:#15789c}
+#navigation{position:absolute;left:max(.6rem,env(safe-area-inset-left));top:max(.6rem,env(safe-area-inset-top));display:flex;align-items:center;z-index:2;background:#fffffff2;border-radius:.4rem;box-shadow:0 1px 6px #0003}
+#navigation .ol-control{position:static;display:flex;background:none;padding:0;border-radius:0}
+#navigation .ol-control+.ol-control{border-left:1px solid #dce3e6}
+#navigation button{width:36px;height:36px;margin:0;border-radius:.3rem;background:transparent;color:#28383f;font-size:21px;font-weight:400;cursor:pointer}
+#navigation button:hover{background:#e8edef}
+#navigation .ol-rotate{opacity:1;visibility:visible}
+#navigation .ol-rotate-reset{font-size:25px}
+#navigation .ol-attribution{max-width:none;text-align:left}
+#navigation .ol-attribution button{font-size:17px}
+#navigation .ol-attribution ul{position:absolute;left:0;top:calc(100% + .4rem);box-sizing:border-box;width:max-content;max-width:min(30rem,calc(100vw - 1.2rem));max-height:35dvh;overflow:auto;background:#fffffff2;border-radius:.3rem;box-shadow:0 1px 6px #0003;padding:.6rem;white-space:normal;line-height:1.5;font-size:11px}
+#navigation .ol-attribution.ol-collapsed ul{display:none}
+#scale{position:absolute;bottom:max(1rem,env(safe-area-inset-bottom));left:max(.6rem,env(safe-area-inset-left));background:#fffe;padding:.25rem .4rem;border-radius:.2rem;pointer-events:none}
+#scale-bar{height:4px;border:solid #222;border-width:0 1px 2px}
+#scale-label{font-size:11px}
+.slope-legend{display:flex;flex-wrap:wrap;gap:.25rem .5rem;font-size:11px;margin:.2rem 0 .3rem}
+.slope-legend[hidden]{display:none}
+.slope-legend span{display:flex;align-items:center;gap:.2rem}
+.slope-legend i{display:inline-block;width:.8rem;height:.6rem;border-radius:1px}
+.slope-legend small{flex-basis:100%;font-size:10px;color:#56646b}
+.slope-legend .slope-status{color:#8a2600}
+@media(pointer:coarse){#map-options summary,#navigation button{width:44px;height:44px}#layers label{min-height:36px}}

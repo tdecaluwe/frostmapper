@@ -1,3 +1,4 @@
+import {attachNavigation} from './map/controls/navigation.js'
 import './map/projections/index.js?v=grieger-wrap'
 import Map from 'ol/Map.js'
 import {defaults as defaultInteractions} from 'ol/interaction/defaults.js'
@@ -11,6 +12,7 @@ import {ContourReprojection} from './map/reprojection/contour-reprojection.js?v=
 import {enableTileLoadingWhileInteracting} from './map/interactive-tile-loading.js'
 const baseSource=new (ZoomBandSource(XYZ))({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})
 const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({preload:2,cacheSize:16384,source:baseSource})],view:createMapView('EPSG:3857',[10,50],4)})
+attachNavigation(map)
 enableTileLoadingWhileInteracting(map)
 const contourReprojection=new ContourReprojection(map,{steps:4})
 baseSource.configureZoomBands(contourReprojection)
