@@ -1,3 +1,5 @@
+> Archived earlier objective. The current map uses the [exposure and fall-line model](EXPOSURE.md).
+
 # Tafjordfjella ski trek: terrain minimax analysis
 
 Computed 20 November 2026 for Danskehytta → Veltdalshytta → Torsbu →
