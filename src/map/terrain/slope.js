@@ -1,8 +1,8 @@
-// HSV: evenly spaced hues from blue-green (165°) to purple (285°).
+// HSV: blue-green (165°) to purple (285°), decreasing hue via green/yellow/red.
 export const SLOPE_BANDS=Array.from({length:7},(_,i)=>{
- const hue=165+i*20,saturation=.9,value=.9,c=value*saturation
+ const hue=(165-i*40+360)%360,saturation=.9,value=.9,c=value*saturation
  const h=hue/60,x=c*(1-Math.abs(h%2-1)),m=value-c
- const rgb=h<3?[0,c,x]:h<4?[0,x,c]:[x,0,c]
+ const rgb=h<1?[c,x,0]:h<2?[x,c,0]:h<3?[0,c,x]:h<4?[0,x,c]:h<5?[x,0,c]:[c,0,x]
  return {minimum:15+i*5,label:i===6?'45°+':`${15+i*5}–${20+i*5}°`,color:rgb.map(v=>Math.round((v+m)*255))}
 })
 export function slopeBand(degrees){return degrees<15?-1:Math.min(6,Math.floor((degrees-15)/5))}

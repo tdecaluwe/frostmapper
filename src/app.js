@@ -40,5 +40,5 @@ document.querySelector('#projection').addEventListener('change',event=>{
  }
 })
 
-import {addSteepnessLayer} from './map/layers/steepness.js'
+import {addSteepnessLayer} from './map/layers/steepness.js?v=palette-v2'
 addSteepnessLayer(map,contourReprojection)

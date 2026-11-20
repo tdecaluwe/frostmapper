@@ -2,14 +2,14 @@ import TileLayer from 'ol/layer/Tile.js'
 import XYZ from 'ol/source/XYZ.js'
 import TileState from 'ol/TileState.js'
 import {ZoomBandSource} from '../reprojection/zoom-band-source.js?v=source-loads'
-import {SLOPE_BANDS} from '../terrain/slope.js'
+import {SLOPE_BANDS} from '../terrain/slope.js?v=palette-v2'
 
 class SlopeTiles {
  constructor(onError){this.next=0;this.pending=new Map();this.onError=onError}
  load(tile){
   if(!this.worker){
    try{
-    this.worker=new Worker(new URL('../terrain/slope-worker.js',import.meta.url),{type:'module'})
+    this.worker=new Worker(new URL('../terrain/slope-worker.js?v=palette-v2',import.meta.url),{type:'module'})
     this.worker.onmessage=({data})=>{
      const tile=this.pending.get(data.id);this.pending.delete(data.id)
      if(!tile)return

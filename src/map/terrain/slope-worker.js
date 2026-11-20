@@ -1,4 +1,4 @@
-import {shadeSlope,terrariumElevation} from './slope.js'
+import {shadeSlope,terrariumElevation} from './slope.js?v=palette-v2'
 
 const cache=new Map(),MAX_ELEVATION_TILES=32
 async function elevation(z,x,y){
