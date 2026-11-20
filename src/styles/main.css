@@ -56,3 +56,10 @@ aside{position:absolute;right:max(.6rem,env(safe-area-inset-right));top:max(.6re
 #trek-legs{padding-bottom:.3rem;}
 #trek-legs small{display:block;font-size:10px;margin-top:.3rem;color:#56646b;}
 #trek-legs a{display:inline-block;font-size:11px;padding:.4rem 0;color:#35647a;}
+
+#trek-legs>label{font-size:11px;flex-wrap:wrap;}
+#trek-legs select{box-sizing:border-box;width:100%;font:11px system-ui;padding:.25rem;}
+#trek-legs .trek-comparison{align-items:flex-start;margin:.3rem 0;line-height:1.4;}
+.trek-comparison input{flex:none;margin-top:.15rem!important;}
+.trek-comparison span{padding-left:.3rem;}
+#trek-legs a{display:block;}
