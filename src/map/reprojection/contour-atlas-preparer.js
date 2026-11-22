@@ -1,4 +1,4 @@
-import {PROJECTION_STRINGS} from '../projections/index.js?v=grieger-wrap'
+import {PROJECTION_STRINGS} from '../projections/index.js?v=antarctica-v1'
 import {MAX_SOURCE_ZOOM} from './contour-atlas-config.js'
 
 const CACHE_PREFIX='frostmapper:contour-atlas:v13:'
@@ -15,7 +15,7 @@ export class ContourAtlasPreparer{
  createWorker(){
   if(this.worker)return true
   try{
-   this.worker=new Worker(new URL('./contour-atlas-worker.js?v=bounded-visibility-v1',import.meta.url),{type:'module'})
+   this.worker=new Worker(new URL('./contour-atlas-worker.js?v=antarctica-v1',import.meta.url),{type:'module'})
    this.worker.onmessage=event=>this.receive(event.data)
    this.worker.onerror=event=>this.failAll(event.message||'Contour atlas worker failed')
   }catch{this.worker=null}

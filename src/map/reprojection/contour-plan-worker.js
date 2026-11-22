@@ -1,6 +1,6 @@
 import {ContourAtlas} from './contour-atlas-index.js?v=progressive-reproj-v1'
 import {BandMaskPlanner} from './band-mask.js?v=progressive-reproj-v1'
-import {get} from '../projections/worker-index.js'
+import {get} from '../projections/worker-index.js?v=antarctica-v1'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
 
 const atlases=new Map(),fields=new Map(),planner=new BandMaskPlanner()

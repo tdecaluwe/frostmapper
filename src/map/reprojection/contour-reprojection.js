@@ -3,10 +3,10 @@ import {StepTilePool} from './step-tile.js'
 import {equivalent} from 'ol/proj.js'
 import {wrapAndSliceX} from 'ol/extent.js'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
-import {ContourPlanClient} from './contour-plan-client.js?v=progressive-reproj-v1'
+import {ContourPlanClient} from './contour-plan-client.js?v=antarctica-v1'
 import {SourceTileAssembler} from './source-assembler.js?v=progressive-reproj-v1'
 import {enableProgressiveReprojection} from './progressive-reproj-tile.js?v=progressive-reproj-v1'
-import {ZoomLevelSupervisor} from './zoom-level-supervisor.js?v=supervisor-v5'
+import {ZoomLevelSupervisor} from './zoom-level-supervisor.js?v=antarctica-v1'
 
 function eachSpan(spans,callback){
  if(ArrayBuffer.isView(spans)){for(let i=0;i<spans.length;i+=4)callback(spans[i],spans[i+1],spans[i+2],spans[i+3]);return}

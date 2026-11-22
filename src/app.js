@@ -1,5 +1,5 @@
 import {attachNavigation} from './map/controls/navigation.js?v=edge-controls-v1'
-import './map/projections/index.js?v=grieger-wrap'
+import './map/projections/index.js?v=antarctica-v1'
 import Map from 'ol/Map.js'
 import {defaults as defaultInteractions} from 'ol/interaction/defaults.js'
 import TileLayer from 'ol/layer/Tile.js'
@@ -8,7 +8,7 @@ import {createMapView} from './map/projections/view.js?v=viewport-model'
 import {ProjectionViewport,ProjectionUnavailableError} from './map/projections/viewport.js'
 import {CanonicalZoom} from './map/projections/canonical-zoom.js'
 import {ZoomBandSource} from './map/reprojection/zoom-band-source.js?v=source-loads'
-import {ContourReprojection} from './map/reprojection/contour-reprojection.js?v=step-tiles-v1'
+import {ContourReprojection} from './map/reprojection/contour-reprojection.js?v=antarctica-v1'
 import {enableTileLoadingWhileInteracting} from './map/interactive-tile-loading.js'
 const baseSource=new (ZoomBandSource(XYZ))({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})
 const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({preload:2,cacheSize:16384,source:baseSource})],view:createMapView('EPSG:3857',[10,50],4)})
@@ -18,7 +18,7 @@ const contourReprojection=new ContourReprojection(map,{steps:4})
 baseSource.configureZoomBands(contourReprojection)
 if(new URL(location.href).searchParams.get('debugBands')==='1')import('./map/reprojection/debug-overlay.js?v=steps-v1').then(({ContourDebugOverlay})=>new ContourDebugOverlay(map,contourReprojection))
 import {readState,syncUrl} from './map/state/url.js?v=contour-bands'
-function applyState(s){const code=['EPSG:3857','EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL'].includes(s.projection)?s.projection:'EPSG:3857';map.setView(CanonicalZoom.createView(code,s.center,s.zoom,s.rotation,map.getSize()));document.querySelector('#projection').value=code}
+function applyState(s){const code=['EPSG:3857','EPSG:3031','EPSG:3035','EPSG:PEIRCE','FROST:TRIPTYCHIAL'].includes(s.projection)?s.projection:'EPSG:3857';map.setView(CanonicalZoom.createView(code,s.center,s.zoom,s.rotation,map.getSize()));document.querySelector('#projection').value=code}
 const initial=readState(); if(initial) applyState(initial)
 syncUrl(map,applyState)
 import {attachScale} from './map/controls/scale.js'
@@ -45,5 +45,8 @@ document.querySelector('#projection').addEventListener('change',event=>{
 import {addSteepnessLayer} from './map/layers/steepness.js?v=palette-v2'
 addSteepnessLayer(map,contourReprojection)
 
-import {addSkiTrek} from './map/layers/ski-trek.js?v=exposure-v1'
+import {addSkiTrek} from './map/layers/ski-trek.js?v=extra-links-v1'
 addSkiTrek(map)
+
+import {addAntarcticaLayer} from './map/layers/antarctica.js'
+addAntarcticaLayer(map)

@@ -4,7 +4,7 @@ export class ContourPlanClient {
  constructor({cacheSize=8192,refreshDelay=64}={}){
   this.cache=new Map();this.completed=new Set();this.pending=new Set();this.jobs=new Map();this.records=new Map();this.atlases=new Set();this.sources=new Set();this.waiters=[];this.cacheSize=cacheSize;this.refreshDelay=refreshDelay;this.revision=0;this.completeRevision=0;this.timer=null;this.pumpTimer=null
   try{
-   this.worker=new Worker(new URL('./contour-plan-worker.js?v=progressive-reproj-v1',import.meta.url),{type:'module'})
+   this.worker=new Worker(new URL('./contour-plan-worker.js?v=antarctica-v1',import.meta.url),{type:'module'})
    this.worker.onmessage=event=>this.receive(event.data)
    this.worker.onerror=()=>this.fail()
   }catch{this.worker=null}

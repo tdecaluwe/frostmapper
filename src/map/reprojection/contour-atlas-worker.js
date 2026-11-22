@@ -1,4 +1,4 @@
-import {get,PROJECTION_STRINGS} from '../projections/worker-index.js'
+import {get,PROJECTION_STRINGS} from '../projections/worker-index.js?v=antarctica-v1'
 import {MAX_SOURCE_ZOOM} from './contour-atlas-config.js'
 import {BoundedProjectionContourAtlas} from './bounded-contour-atlas-builder.js?v=visibility-v1'
 
