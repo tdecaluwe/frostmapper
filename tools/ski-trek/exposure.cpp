@@ -40,7 +40,7 @@ int main(int argc,char**argv){
  auto permits=[&](int i,int k){
   if(s[i]<=10)return true;
   if(!computed[i]){
-   computed[i]=1;int r=i/W,c=i%W;double gx=h[r*W+min(W-1,c+1)]-h[r*W+max(0,c-1)],gy=h[min(H-1,r+1)*W+c]-h[max(0,r-1)*W+c];double norm=hypot(gx,gy),angle=30-s[i];
+   computed[i]=1;int r=i/W,c=i%W;double gx=h[r*W+min(W-1,c+1)]-h[r*W+max(0,c-1)],gy=h[min(H-1,r+1)*W+c]-h[max(0,r-1)*W+c];double norm=hypot(gx,gy),angle=90-3*s[i];
    if(angle>=0&&norm>0){double threshold=cos(angle*M_PI/180);
     for(int j=0;j<K;j++)if(abs(gx*moves[j].ux+gy*moves[j].uy)/norm>=threshold-1e-12)allowed[(size_t)i*words+j/64]|=1ULL<<(j%64);
    }

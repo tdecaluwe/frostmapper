@@ -1,3 +1,5 @@
+import {transformExtent} from 'ol/proj.js'
+import {createMapView} from '../projections/view.js?v=viewport-model'
 import {kilometreSegments,trackDistance} from './track-segments.js'
 import Feature from 'ol/Feature.js'
 import Point from 'ol/geom/Point.js'
@@ -11,7 +13,7 @@ import Text from 'ol/style/Text.js'
 import Fill from 'ol/style/Fill.js'
 
 const COLORS=['#b02a37','#165dce','#8a3daa','#b05b00','#087b53','#087b53']
-const OPTION_COLORS={A:'#b02a37',B:'#8651b8',C:'#b16b00',D:'#08758b',E:'#287332',under20:'#565d63',R:'#087b53',F:'#ab286f',G:'#9b7517'}
+const OPTION_COLORS={A:'#b02a37',B:'#8651b8',C:'#b16b00',D:'#08758b',E:'#287332',under20:'#565d63',R:'#087b53',F:'#ab286f',G:'#9b7517',VP:'#3571b3',VPm:'#8050a0',VPs:'#b54935',VJ:'#266a4d',JM:'#a16e18',JMc:'#5a4eaa',JMm:'#ab286f',JMs:'#99512c',T:'#565d63',U:'#929292'}
 const metric=p=>`${p.distance_km.toFixed(1)} km · ${Math.round(p.distance_above_15_m)} m >15° · ${p.max_slope_deg.toFixed(1)}° max`
 const element=(tag,text,className)=>{const node=document.createElement(tag);if(text)node.textContent=text;if(className)node.className=className;return node}
 const xml=text=>String(text).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]))
@@ -22,9 +24,9 @@ export class SkiTrekLayer {
  constructor(map){
   this.map=map;this.source=new VectorSource({attributions:'Terrain route analysis: Mapzen / Kartverket DEM'})
   this.layer=new VectorLayer({source:this.source,zIndex:30});map.addLayer(this.layer)
-  this.comparisons=new Set(['A','C']);this.returnComparisons=new Set(['F']);this.activeDay=0;this.styles=new Map();this.objectURL=null
+  this.comparisons=new Set(['A','C']);this.returnComparisons=new Set(['F']);this.visibleDiagnostics=new Set(['T']);this.additionalVisible=new Set(['VP','VJ','JMc']);this.activeDay=0;this.styles=new Map();this.objectURL=null
   this.createControls();map.on('change:view',()=>this.rebuild())
-  fetch(new URL('../../../data/ski-trek/exposure-routes.geojson',import.meta.url)).then(r=>{if(!r.ok)throw Error('Tracks unavailable');return r.json()}).then(data=>this.load(data)).catch(error=>{this.status.textContent=error.message})
+  fetch(new URL('../../../data/ski-trek/exposure-routes.geojson?v=fallline-v2',import.meta.url)).then(r=>{if(!r.ok)throw Error('Tracks unavailable');return r.json()}).then(data=>this.load(data)).catch(error=>{this.status.textContent=error.message})
  }
  createControls(){
   const panel=element('div'),row=element('div',null,'trek-row'),label=element('label')
@@ -39,8 +41,8 @@ export class SkiTrekLayer {
  }
  load(data){
   this.data=data;this.selected=data.features.map(f=>structuredClone(f));this.show.disabled=false
-  const heading=element('small','Above 10°: fall-line angle ≤ 30° − terrain slope.');this.list.append(heading)
-  const selectLabel=element('label','Day 1 plan');this.select=element('select');this.select.setAttribute('aria-label','Day 1 plan')
+  const heading=element('small','Above 10°: fall-line angle ≤ 90° − 3 × terrain slope.');this.list.append(heading)
+  const selectLabel=element('label','Day 1 → Veltdalshytta');this.select=element('select');this.select.setAttribute('aria-label','Day 1 plan')
   for(const f of data.day1_options){const p=f.properties,option=element('option',`${p.id}: ${metric(p)}`);option.value=p.id;this.select.append(option)}
   this.select.value=this.selected[0].properties.id
   selectLabel.append(this.select);this.list.append(selectLabel)
@@ -52,9 +54,13 @@ export class SkiTrekLayer {
    const text=element('span',`${p.id}. ${p.label} · ${metric(p)}`);text.style.borderLeft=`3px solid ${OPTION_COLORS[p.id]}`;label.append(input,text);this.list.append(label);this.optionInputs.set(p.id,input)
    input.addEventListener('change',()=>{if(input.checked)this.comparisons.add(p.id);else this.comparisons.delete(p.id);this.rebuild()})
   }
-  const diagnostic=data.diagnostics[0],label=element('label',null,'trek-comparison'),check=element('input');check.type='checkbox'
-  label.append(check,element('span',`Sub-20° diagnostic: ${diagnostic.properties.distance_km.toFixed(1)} km — exceeds 25 km limit`));this.list.append(label)
-  check.addEventListener('change',()=>{this.diagnostic=check.checked;this.rebuild()})
+  this.list.append(element('small','Sub-20° alternatives end at Torsbu, a different overnight stop. Separate GPX; not added to the six-day plan.'))
+  for(const diagnostic of data.diagnostics){
+   const p=diagnostic.properties,label=element('label',null,'trek-comparison'),check=element('input');check.type='checkbox';check.checked=this.visibleDiagnostics.has(p.id)
+   label.append(check,element('span',`${p.label} · ${metric(p)}${p.over_daily_limit?' — over 25 km':''}`));this.list.append(label)
+   check.addEventListener('change',()=>{if(check.checked)this.visibleDiagnostics.add(p.id);else this.visibleDiagnostics.delete(p.id);this.rebuild()})
+   const download=element('a',`GPX: ${p.label}`);download.href=new URL(`../../../data/ski-trek/${p.download}?v=fallline-v2`,import.meta.url);download.download=p.download;this.list.append(download)
+  }
   this.buttons=this.selected.map((f,i)=>{
    const button=element('button',null,'trek-leg');button.type='button';this.list.append(button)
    button.addEventListener('click',()=>{this.activeDay=i+1;this.rebuild();const feature=new GeoJSON().readFeature(this.selected[i],{featureProjection:this.map.getView().getProjection()});this.fit(feature.getGeometry().getExtent())});return button
@@ -71,9 +77,17 @@ export class SkiTrekLayer {
    input.addEventListener('change',()=>{if(input.checked)this.returnComparisons.add(p.id);else this.returnComparisons.delete(p.id);this.rebuild()})
   }
   this.download=element('a','Download selected plan GPX');this.list.append(this.download)
-  const options=element('a','Download all day 1 options');options.href=new URL('../../../data/ski-trek/day1-exposure-options.gpx',import.meta.url);options.download='day1-exposure-options.gpx';this.list.append(options)
-  const returns=element('a','Download return options');returns.href=new URL('../../../data/ski-trek/return-exposure-options.gpx',import.meta.url);returns.download='return-exposure-options.gpx';this.list.append(returns)
-  this.list.append(element('small','Terrain-model candidates. A sub-20° day 1 within 25 km has not been found.'))
+  const options=element('a','Download all day 1 options');options.href=new URL('../../../data/ski-trek/day1-exposure-options.gpx?v=fallline-v2',import.meta.url);options.download='day1-exposure-options.gpx';this.list.append(options)
+  const returns=element('a','Download return options');returns.href=new URL('../../../data/ski-trek/return-exposure-options.gpx?v=fallline-v2',import.meta.url);returns.download='return-exposure-options.gpx';this.list.append(returns)
+  this.list.append(element('small','Additional links (separate GPX files; do not change the six-day plan):'))
+  for(const f of data.additional_routes||[]){
+   const p=f.properties,label=element('label',null,'trek-comparison'),check=element('input');check.type='checkbox';check.checked=this.additionalVisible.has(p.id)
+   const text=element('span',`${p.label} · ${metric(p)}`);text.style.borderLeft=`3px solid ${OPTION_COLORS[p.id]}`;label.append(check,text);this.list.append(label)
+   check.addEventListener('change',()=>{if(check.checked)this.additionalVisible.add(p.id);else this.additionalVisible.delete(p.id);this.rebuild()})
+   const fit=element('button',`${p.start} → ${p.end}`,'trek-leg');fit.type='button';fit.addEventListener('click',()=>{this.additionalVisible.add(p.id);check.checked=true;this.rebuild();const feature=new GeoJSON().readFeature(f,{featureProjection:this.map.getView().getProjection()});this.fit(feature.getGeometry().getExtent())});this.list.append(fit)
+   const download=element('a',`GPX: ${p.id}`);download.href=new URL(`../../../data/ski-trek/${p.download}?v=fallline-v2`,import.meta.url);download.download=p.download;this.list.append(download)
+  }
+  this.list.append(element('small','Terrain-model candidates. Sub-20° Torsbu options exceed the original 25 km limit.'))
   this.update()
  }
  update(){
@@ -108,18 +122,32 @@ export class SkiTrekLayer {
   for(const f of this.data.day1_options)if(f.properties.id!==this.select.value&&this.comparisons.has(f.properties.id))this.addTrack(f,0,OPTION_COLORS[f.properties.id],`1${f.properties.id}`)
   const returnOffset=this.selected.slice(0,5).reduce((sum,f)=>sum+trackDistance(f.geometry.coordinates),0)
   for(const f of this.data.day6_options)if(f.properties.id!==this.returnSelect.value&&this.returnComparisons.has(f.properties.id))this.addTrack(f,returnOffset,OPTION_COLORS[f.properties.id],`6${f.properties.id}`)
-  if(this.diagnostic)this.addTrack(this.data.diagnostics[0],0,OPTION_COLORS.under20,'<20° · over limit',true)
+  for(const f of this.data.diagnostics)if(this.visibleDiagnostics.has(f.properties.id))this.addTrack(f,0,OPTION_COLORS[f.properties.id],`${f.properties.id}: <20° → Torsbu`,true)
+  const jerChain=(this.data.additional_routes||[]).find(f=>f.properties.id==='VJ')
+  for(const f of this.data.additional_routes||[])if(this.additionalVisible.has(f.properties.id)){
+   const p=f.properties,offset=p.id.startsWith('JM')&&jerChain?trackDistance(jerChain.geometry.coordinates):p.id.startsWith('VP')?trackDistance(this.selected[0].geometry.coordinates):0
+   this.addTrack(f,offset,OPTION_COLORS[p.id],p.id)
+  }
   const seen=new Set()
-  for(const f of this.selected){
+  for(const f of [...this.selected,...(this.data.additional_routes||[]).filter(f=>this.additionalVisible.has(f.properties.id))]){
    const name=f.properties.start;if(seen.has(name))continue;seen.add(name)
    const first=new GeoJSON().readFeature(f,{featureProjection:this.map.getView().getProjection()}).getGeometry().getFirstCoordinate(),marker=new Feature(new Point(first))
    marker.setStyle(new Style({image:new CircleStyle({radius:4,fill:new Fill({color:'white'}),stroke:new Stroke({color:'#243642',width:2})}),text:new Text({text:name,offsetY:-13,font:'bold 11px system-ui',fill:new Fill({color:'#243642'}),stroke:new Stroke({color:'white',width:3})})}));this.source.addFeature(marker)
   }
+  const mebua=(this.data.additional_routes||[]).find(f=>f.properties.end==='Mebua'&&this.additionalVisible.has(f.properties.id))
+  if(mebua){
+   const line=new GeoJSON().readFeature(mebua,{featureProjection:this.map.getView().getProjection()}).getGeometry(),marker=new Feature(new Point(line.getLastCoordinate()))
+   marker.setStyle(new Style({image:new CircleStyle({radius:4,fill:new Fill({color:'white'}),stroke:new Stroke({color:'#243642',width:2})}),text:new Text({text:'Mebua',offsetY:-13,font:'bold 11px system-ui',fill:new Fill({color:'#243642'}),stroke:new Stroke({color:'white',width:3})})}));this.source.addFeature(marker)
+  }
  }
- fit(extent){this.toggle.checked=true;this.layer.setVisible(true);this.map.getView().fit(extent,{size:this.map.getSize(),padding:[50,65,50,35],maxZoom:14,duration:250})}
+ fit(extent){
+  if(this.map.getView().getProjection().getCode()==='EPSG:3031'){
+   extent=transformExtent(extent,'EPSG:3031','EPSG:3857',16);this.map.setView(createMapView('EPSG:3857',[7.7,62.2],10));document.querySelector('#projection').value='EPSG:3857'
+  }
+  this.toggle.checked=true;this.layer.setVisible(true);this.map.getView().fit(extent,{size:this.map.getSize(),padding:[50,65,50,35],maxZoom:14,duration:250})}
  updateDownload(){
   if(this.objectURL)URL.revokeObjectURL(this.objectURL)
-  const tracks=this.selected.map(f=>{const p=f.properties,points=f.geometry.coordinates.map(([lon,lat,h])=>`<trkpt lat="${lat}" lon="${lon}"><ele>${h}</ele></trkpt>`).join('');return `<trk><name>${xml(`Day ${p.day} ${p.id}: ${p.start} – ${p.end}`)}</name><desc>${xml(metric(p)+'; terrain-only; fall-line angle <=30-slope above 10 degrees')}</desc><trkseg>${points}</trkseg></trk>`}).join('')
+  const tracks=this.selected.map(f=>{const p=f.properties,points=f.geometry.coordinates.map(([lon,lat,h])=>`<trkpt lat="${lat}" lon="${lon}"><ele>${h}</ele></trkpt>`).join('');return `<trk><name>${xml(`Day ${p.day} ${p.id}: ${p.start} – ${p.end}`)}</name><desc>${xml(metric(p)+'; terrain-only; fall-line angle <=90-3*slope above 10 degrees')}</desc><trkseg>${points}</trkseg></trk>`}).join('')
   this.objectURL=URL.createObjectURL(new Blob([`<?xml version="1.0" encoding="UTF-8"?><gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="Frostmapper">${tracks}</gpx>`],{type:'application/gpx+xml'}));this.download.href=this.objectURL;this.download.download='tafjord-exposure-plan.gpx'
  }
 }

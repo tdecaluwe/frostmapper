@@ -29,7 +29,7 @@ def analyze(pathfile):
    if s>20:over20+=dl
    if s>10:
     gx=float(heights[y,min(W-1,x+1)])-float(heights[y,max(0,x-1)]);gy=float(heights[min(H-1,y+1),x])-float(heights[max(0,y-1),x]);angle=math.degrees(math.acos(min(1.,abs(gx*ux+gy*uy)/math.hypot(gx,gy))))
-    excess=angle-(30-s);maxexcess=max(maxexcess,excess);assert excess<1e-7,(pathfile,y,x,s,angle);tests+=1
+    excess=angle-(90-3*s);maxexcess=max(maxexcess,excess);assert excess<1e-7,(pathfile,y,x,s,angle);tests+=1
  delta=np.diff(heights[p[:,0],p[:,1]])
  return dict(pathfile=pathfile,distance_km=length/1000,distance_above_15_m=steep,distance_above_20_m=over20,max_slope_deg=maxslope,slope_excess_degree_metres=severity,ascent_m=float(delta.clip(0).sum()),descent_m=float(-delta.clip(max=0).sum()),fallline_checks=tests,maximum_angle_rule_excess_deg=maxexcess)
 

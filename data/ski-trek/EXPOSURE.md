@@ -1,106 +1,114 @@
-# Current trek model: steep-ground exposure and fall-line direction
+# Current exposure model — widened fall-line rule
 
-This replaces the earlier maximum-slope objective. The old files and README
-remain as an archive; the map now loads `exposure-routes.geojson`.
+The current map uses `exposure-routes.geojson`. Earlier files are retained as
+archived results, not mixed into the current route layer.
 
-## Requirements
+The objective remains distance on terrain steeper than 15°, with distance and
+maximum-grade trade-offs shown separately. Above a 10° terrain slope `s`, the
+heading allowance is now **90 − 3 × s degrees**, relative to either uphill or
+downhill fall line. It gives ±60° at 10°, ±45° at 15°, ±30° at 20° and ±15° at
+25°. All current tracks were recomputed and independently validated against
+this widened rule. Terrain below 10° has no heading constraint.
 
-- Primary comparison: horizontal distance travelled on **terrain** steeper
-  than 15°, using the full magnitude of the terrain gradient.
-- Above a 10° terrain slope `s`, travel must stay within `30 − s` degrees of
-  either uphill or downhill fall line. This gives ±20° at 10°, ±15° at 15°,
-  ±10° at 20°, and ±5° at 25°. Slopes above 30° cannot satisfy this rule.
-- Days 1–5: prefer 18 km, maximum 25 km. Return alternatives on day 6:
-  maximum 35 km, following the revised request.
-- Try to keep day 1 below 20° terrain slope.
-- Display alternatives where distance, steep-ground exposure and maximum
-  slope have different trade-offs. Kilometre opacity continues through huts.
+Days 1–5 retain the 18 km preference and 25 km maximum. Tjønnebu return
+alternatives may extend to 35 km. The six-day plan still visits Veltdalshytta;
+the separate sub-20° alternatives now end at **Torsbu**, as requested.
 
-## Day 1 candidates
+## Veltdalshytta-bound day 1
 
-| Option | Distance | Distance on >15° terrain | Max traversed terrain slope |
+| Option | Distance | Distance above 15° | Maximum terrain slope |
 | --- | ---: | ---: | ---: |
-| A: shorter day | 17.52 km | 1,860 m | 26.9° |
-| B: lower peak, under 18 km | 17.86 km | 2,241 m | 24.9° |
-| C: lower peak, about 20 km | 19.96 km | 1,451 m | 24.5° |
-| D: least exposure found | 23.23 km | 736 m | 27.4° |
-| E: lowest peak among daily candidates | 24.99 km | 1,148 m | 23.9° |
+| A | 16.97 km | 1,773 m | 29.7° |
+| B | 17.26 km | 1,796 m | 24.9° |
+| C | 20.09 km | 1,173 m | 24.9° |
+| D | 21.59 km | 470 m | 28.5° |
+| E | 23.57 km | 1,034 m | 23.5° |
 
-Option D is initially selected because it has the least >15° exposure among
-these daily candidates. A and C are initially displayed for comparison. A/B
-meet the 18 km preference. Selecting an option updates the planned track,
-later kilometre phases and the selected-plan GPX. Comparison overlays are
-optional; they are not additional legs of the itinerary.
+D initially selects the least exposure found among these daily candidates.
+A and C are shown for comparison. Choices update the selected-plan GPX and
+all subsequent kilometre-opacity phases. Comparisons are not extra trip legs.
 
-**A day-1 route below 20° and within 25 km has not been found.** A search with
-176 directions, then a finer 640-direction stencil, found no connection in
-the 25 km reachable domain under the heading rule and a 20° cap. A sub-20°
-candidate found with a larger domain is 33.37 km, with 2,930 m above 15° and
-maximum slope 19.994°. It is displayed only as an optional diagnostic and
-cannot be selected into the daily plan. This is a result of the raster
-search, not a proof that no continuous field route exists.
+## Sub-20° overnight alternatives to Torsbu
 
-## Other legs and return choices
+- T: Danskehytta → Torsbu, **26.96 km**, **2,228 m above 15°**, maximum **19.95°**.
+- U: same endpoints, **32.70 km**, **211 m above 15°**, maximum **19.04°**.
 
-| Day / option | Distance | Distance on >15° terrain | Maximum terrain slope |
+Both are genuine sub-20° terrain candidates under the new heading rule, but
+both exceed the unchanged 25 km day limit. They are shown as different-night
+alternatives and have separate GPX downloads. They cannot silently introduce
+a discontinuity into the selected six-day GPX. The shorter T option is visible
+by default. No qualifying Torsbu-bound path inside the 25 km reachable domain
+was found in this discrete search; this is not a proof about every continuous
+field route. The 27 km and 33 km searches use the larger domain.
+
+## Additional direct links
+
+The following are separate overlays/GPX files, not an automatic reordering of
+all overnight stops. VP variants connect Veltdalshytta directly to Pyttbua,
+without requiring an overnight at Torsbu.
+
+| Link | Distance | Distance above 15° | Maximum terrain slope |
 | --- | ---: | ---: | ---: |
-| 2: Veltdalshytta → Torsbu | 10.94 km | 0 m | 15.0° |
-| 3: Torsbu → Pyttbua | 11.76 km | 27 m | 15.3° |
-| 4: Pyttbua → Vakkerstøylen | 13.57 km | 0 m | 14.9° |
-| 5: Vakkerstøylen → Tjønnebu | 12.63 km | 13 m | 15.6° |
-| 6 R: retrace day 5 | 12.63 km | 13 m | 15.6° |
-| 6 F: lower-valley diversion | 13.98 km | 58 m | 19.6° |
-| 6 G: wider eastern loop | 19.31 km | 437 m | 28.9° |
+| VP: Veltdalshytta → Pyttbua | 11.28 km | 27 m | 15.3° |
+| VPm: Veltdalshytta → Pyttbua | 10.30 km | 75 m | 15.5° |
+| VPs: Veltdalshytta → Pyttbua | 7.29 km | 2,241 m | 28.0° |
+| VJ: Vakkerstøylen → Jervebua | 4.49 km | 0 m | 14.9° |
+| JM: Jervebua → Mebua | 24.76 km | 0 m | 15.0° |
+| JMc: Jervebua → Mebua | 17.16 km | 1,549 m | 20.0° |
+| JMm: Jervebua → Mebua | 11.15 km | 622 m | 29.2° |
+| JMs: Jervebua → Mebua | 8.69 km | 2,163 m | 28.6° |
 
-R remains selected by default. F is shown for comparison; G can be enabled.
-The return diversions share the upper route rather than providing wholly
-independent hut-to-hut corridors. They were found by excluding 500 m disks
-on different lower-valley sections of the outbound track. Excluding a full
-500/1,000 m outbound corridor, except hut approaches, found no connection
-with the heading constraint in the searches run. G is a geography/variety
-option, not an improvement over F in exposure, length or maximum grade.
+Jervebua coordinates are 62.30769 N, 7.81791 E, as listed by
+[iLende](https://www.ilende.no/hytte/jervebua). Mebua uses the UTM zone 32N
+position 441454, 6910765 from
+[Peakbook](https://peakbook.org/en/peakbook-element/66605/en/Mebua.html),
+which agrees within about ten metres with
+[iLende](https://ilende.app/en/hut/mebua). These identify the huts by
+Vesle Hånådalsvatnet and Midtbottvatnet, respectively.
 
-Angles and very short exposure lengths are DEM estimates, not measurement
-accuracy. Values rounded to 15.0° can be fractionally below 15° and therefore
-have zero positive-length exposure above the strict threshold.
+VP, VJ and JMc are initially shown. Other options can be enabled separately.
+The VJ/JM branch's kilometre count continues through Jervebua. For a direct
+VP comparison, chainage begins at the selected main plan's Veltdalshytta stop.
 
-## Algorithm and limits
+## Return alternatives
 
-Inputs are the same ~8.9 m Terrarium elevation mosaic and public hut positions
-documented in README.md. Central differences define gradient magnitude and
-fall line. Headings compare in the conformal Mercator plane; ground distances
-use the latitude correction. Both ascending and descending directions count.
+Current return alternatives are recomputed too. F is the lower-valley
+variation (12.89 km, about 13 m above 15°, maximum 15.5°). G is a more substantial
+upper-valley detour (18.05 km, about 1,424 m above 15°, maximum 29.5°).
+They retain explicit 500 m local exclusion gates to create variety and share
+parts of the ordinary corridor. R still retraces the selected outbound track.
+The 35 km allowance is a ceiling, not a target length.
 
-The direction-aware graph uses primitive displacements out to eight cells:
-176 headings rather than the former eight. Straight segments are clipped
-exactly against raster squares. Each positive-length intersection contributes
-its ground length to the >15° cost and must satisfy its own local heading
-allowance. Merely checking endpoint headings would be insufficient. Touching
-corner cells must also satisfy the terrain cap, but a zero-length corner
-contact adds no exposure. Long flat-region moves can use a shorter stencil.
+## Algorithm, accuracy and validation
 
-A family of shortest paths minimizes
-`distance_above_15 + lambda * total_distance` for sampled `lambda` values,
-with terrain caps 20°, 22.5°, 25° and 29.9°. Length-ineligible outputs are
-excluded from the selectable plan. This produces supported candidate
-trade-offs; it **does not certify the exact resource-constrained global
-minimum**. Thus descriptions use “least exposure found.” Day-1 cap checks
-were also repeated with the 640-heading stencil.
+Input DEM and original hut coordinates are described in README.md. Ground
+pixels are about 8.9 m. Central differences supply full terrain-gradient
+magnitude and aspect, independent of the uphill/downhill track grade.
 
-Independent Python code re-integrated every exported candidate across all
-intersected cells, recomputed length and exposure, and checked
-`abs(deviation) − (30 − slope) < 0` wherever slope exceeds 10°. This includes
-F/G and the long diagnostic. Coordinates retain double precision: rounding
-can otherwise alter a heading with a small remaining angular margin.
-Analytic-plane checks cover heading rejection, slope caps, gentle terrain,
-exposure integration and avoidance of an isolated steeper cell.
+The direction-aware graph uses 176 primitive travel directions (radius eight
+cells). Straight segments are clipped exactly against raster squares. Each
+positive-length intersection contributes to the above-15° exposure and must
+satisfy its own local fall-line allowance. Zero-length corner contacts add no
+exposure; touched cells still satisfy the chosen terrain cap. Distances use
+latitude-corrected ground spacing. A shorter stencil is used in all-flat
+neighborhoods. This work is offline; the render loop only draws geometry.
 
-The model remains terrain-only. Snow, ice, avalanche exposure, obstacles and
-bridges are outside this calculation, as requested.
+A family of paths minimizes `distance_above_15 + lambda * total_distance`,
+with several terrain caps and lambda values. Length-ineligible outputs are
+excluded from daily selections. These are supported candidate trade-offs,
+**not certified global resource-constrained optima**. The fixed search grid,
+DEM/source resolution and snow-free terrain model limit physical accuracy.
+
+Independent Python integration checks every exported positive-length
+segment/cell intersection using `deviation <= 90 - 3*slope` above 10°. This
+covers all main, comparison, Torsbu and added-link options. Coordinates retain
+double precision so rounding does not alter tight heading margins. Analytic
+plane tests include headings accepted by the widened rule and rejected
+outside it. No snow, ice, avalanche, bridge or obstacle model was added.
 
 ## Reproduce
 
-First download and build the working rasters using README.md. Then:
+Download and build the working rasters as in README.md, then:
 
 ```sh
 c++ -O3 -o /tmp/tafjord-analysis/exposure tools/ski-trek/exposure.cpp
@@ -109,8 +117,6 @@ python3 tools/ski-trek/search-exposure.py /tmp/tafjord-analysis
 python3 tools/ski-trek/export-exposure.py /tmp/tafjord-analysis data/ski-trek
 ```
 
-`exposure-trek.gpx` is the initially selected six-day plan. The map generates
-an updated GPX when choices change. `day1-exposure-options.gpx` contains the
-five eligible day-1 choices; `return-exposure-options.gpx` contains R/F/G.
-`day1-under20-overlimit.gpx` is the separate diagnostic, not a daily option.
-All route preparation is offline; the render loop only draws prepared features.
+The GPX controls generate the selected main plan. Standalone Torsbu and
+additional-link downloads keep those variants separate. Earlier strict-rule
+GPX files remain historical artifacts and are not linked by the current UI.
