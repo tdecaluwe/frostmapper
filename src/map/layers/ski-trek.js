@@ -14,7 +14,7 @@ import Fill from 'ol/style/Fill.js'
 
 const COLORS=['#b02a37','#165dce','#8a3daa','#b05b00','#087b53','#087b53']
 const OPTION_COLORS={A:'#b02a37',B:'#8651b8',C:'#b16b00',D:'#08758b',E:'#287332',under20:'#565d63',R:'#087b53',F:'#ab286f',G:'#9b7517',VP:'#3571b3',VPm:'#8050a0',VPs:'#b54935',VJ:'#266a4d',JM:'#a16e18',JMc:'#5a4eaa',JMm:'#ab286f',JMs:'#99512c',T:'#565d63',U:'#929292'}
-const metric=p=>`${p.distance_km.toFixed(1)} km · ${Math.round(p.distance_above_15_m)} m >15° · ${p.max_slope_deg.toFixed(1)}° max`
+const metric=p=>`${p.distance_km.toFixed(1)} km · ${Math.round(p.distance_above_15_m)} m >15° · ${p.max_slope_deg.toFixed(1)}° model max`
 const element=(tag,text,className)=>{const node=document.createElement(tag);if(text)node.textContent=text;if(className)node.className=className;return node}
 const xml=text=>String(text).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]))
 
@@ -24,9 +24,9 @@ export class SkiTrekLayer {
  constructor(map){
   this.map=map;this.source=new VectorSource({attributions:'Terrain route analysis: Mapzen / Kartverket DEM'})
   this.layer=new VectorLayer({source:this.source,zIndex:30});map.addLayer(this.layer)
-  this.comparisons=new Set(['A','C']);this.returnComparisons=new Set(['F']);this.visibleDiagnostics=new Set(['T']);this.additionalVisible=new Set(['VP','VJ','JMc']);this.activeDay=0;this.styles=new Map();this.objectURL=null
+  this.comparisons=new Set(['A']);this.returnComparisons=new Set(['F']);this.visibleDiagnostics=new Set(['T']);this.additionalVisible=new Set(['VP','VJ','JMc']);this.activeDay=0;this.styles=new Map();this.objectURL=null
   this.createControls();map.on('change:view',()=>this.rebuild())
-  fetch(new URL('../../../data/ski-trek/exposure-routes.geojson?v=fallline-v2',import.meta.url)).then(r=>{if(!r.ok)throw Error('Tracks unavailable');return r.json()}).then(data=>this.load(data)).catch(error=>{this.status.textContent=error.message})
+  fetch(new URL('../../../data/ski-trek/exposure-routes.geojson?v=cliff-withdrawal-v1',import.meta.url)).then(r=>{if(!r.ok)throw Error('Tracks unavailable');return r.json()}).then(data=>this.load(data)).catch(error=>{this.status.textContent=error.message})
  }
  createControls(){
   const panel=element('div'),row=element('div',null,'trek-row'),label=element('label')
@@ -40,6 +40,7 @@ export class SkiTrekLayer {
   this.show.addEventListener('click',()=>{this.activeDay=0;this.rebuild();this.fit(this.source.getExtent())})
  }
  load(data){
+  if(data.terrain_validation?.warning){this.list.append(element('small',data.terrain_validation.warning));this.status.textContent='Unverified terrain candidates · C/E withdrawn: cliff crossing'}
   this.data=data;this.selected=data.features.map(f=>structuredClone(f));this.show.disabled=false
   const heading=element('small','Above 10°: fall-line angle ≤ 90° − 3 × terrain slope.');this.list.append(heading)
   const selectLabel=element('label','Day 1 → Veltdalshytta');this.select=element('select');this.select.setAttribute('aria-label','Day 1 plan')
@@ -77,7 +78,7 @@ export class SkiTrekLayer {
    input.addEventListener('change',()=>{if(input.checked)this.returnComparisons.add(p.id);else this.returnComparisons.delete(p.id);this.rebuild()})
   }
   this.download=element('a','Download selected plan GPX');this.list.append(this.download)
-  const options=element('a','Download all day 1 options');options.href=new URL('../../../data/ski-trek/day1-exposure-options.gpx?v=fallline-v2',import.meta.url);options.download='day1-exposure-options.gpx';this.list.append(options)
+  const options=element('a','Download all day 1 options');options.href=new URL('../../../data/ski-trek/day1-exposure-options.gpx?v=cliff-withdrawal-v1',import.meta.url);options.download='day1-exposure-options.gpx';this.list.append(options)
   const returns=element('a','Download return options');returns.href=new URL('../../../data/ski-trek/return-exposure-options.gpx?v=fallline-v2',import.meta.url);returns.download='return-exposure-options.gpx';this.list.append(returns)
   this.list.append(element('small','Additional links (separate GPX files; do not change the six-day plan):'))
   for(const f of data.additional_routes||[]){

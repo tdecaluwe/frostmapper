@@ -3,6 +3,14 @@
 The current map uses `exposure-routes.geojson`. Earlier files are retained as
 archived results, not mixed into the current route layer.
 
+**Cliff correction (2026-11-22): options C and E are withdrawn from the map
+and current GPX options.** Near 62.148685 N, 7.661413 E, Kartverket's 1 m DTM
+shows a local terrain slope of about 81° on their shared descent. Terrarium
+reports only about 13–14° over the reported area. Increasing Terrarium tile
+zoom to 15 did not resolve the missing cliff. See [validation evidence](cliff-validation.json).
+The remaining routes have not been validated against this 1 m model. All slope
+figures below are estimates from the coarse routing model, not terrain guarantees.
+
 The objective remains distance on terrain steeper than 15°, with distance and
 maximum-grade trade-offs shown separately. Above a 10° terrain slope `s`, the
 heading allowance is now **90 − 3 × s degrees**, relative to either uphill or
@@ -20,12 +28,10 @@ the separate sub-20° alternatives now end at **Torsbu**, as requested.
 | --- | ---: | ---: | ---: |
 | A | 16.97 km | 1,773 m | 29.7° |
 | B | 17.26 km | 1,796 m | 24.9° |
-| C | 20.09 km | 1,173 m | 24.9° |
 | D | 21.59 km | 470 m | 28.5° |
-| E | 23.57 km | 1,034 m | 23.5° |
 
 D initially selects the least exposure found among these daily candidates.
-A and C are shown for comparison. Choices update the selected-plan GPX and
+A is shown for comparison. Choices update the selected-plan GPX and
 all subsequent kilometre-opacity phases. Comparisons are not extra trip legs.
 
 ## Sub-20° overnight alternatives to Torsbu
@@ -33,7 +39,7 @@ all subsequent kilometre-opacity phases. Comparisons are not extra trip legs.
 - T: Danskehytta → Torsbu, **26.96 km**, **2,228 m above 15°**, maximum **19.95°**.
 - U: same endpoints, **32.70 km**, **211 m above 15°**, maximum **19.04°**.
 
-Both are genuine sub-20° terrain candidates under the new heading rule, but
+Both are sub-20° candidates in the coarse terrain model under the new heading rule, but
 both exceed the unchanged 25 km day limit. They are shown as different-night
 alternatives and have separate GPX downloads. They cannot silently introduce
 a discontinuity into the selected six-day GPX. The shorter T option is visible

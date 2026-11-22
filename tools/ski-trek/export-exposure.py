@@ -3,7 +3,7 @@ import json,math,copy,xml.etree.ElementTree as ET
 import numpy as np
 from importlib.machinery import SourceFileLoader
 root=Path(__import__('sys').argv[1]);out=Path(__import__('sys').argv[2]);m=json.loads((root/'meta.json').read_text());h=np.load(root/'height.npy',mmap_mode='r');analyzer=SourceFileLoader('analysis',str(Path(__file__).with_name('analyze-exposure.py'))).load_module();world=256*2**m['z']
-variants=[('A','Shorter day','day1-cap-29.9-lambda-0.5.bin'),('B','Lower peak slope, under 18 km','day1-cap-25-lambda-0.5.bin'),('C','Lower peak slope, about 20 km','day1-cap-25-lambda-0.1.bin'),('D','Least steep-ground distance found','day1-cap-29.9-lambda-0.02.bin'),('E','Lowest peak among daily candidates','day1-cap-23.5-lambda-0.03.bin')]
+variants=[('A','Shorter day','day1-cap-29.9-lambda-0.5.bin'),('B','Lower peak slope, under 18 km','day1-cap-25-lambda-0.5.bin'),('D','Least steep-ground distance found','day1-cap-29.9-lambda-0.02.bin')]
 def coordinates(points):
  return [[float((int(x)+m['xmin']*256+.5)/world*360-180),float(math.degrees(math.atan(math.sinh(math.pi*(1-2*(int(y)+m['ymin']*256+.5)/world))))),float(h[y,x])] for y,x in points]
 def feature(day,pathfile,id,label,diagnostic=False,endpoints=None):
@@ -16,7 +16,7 @@ def feature(day,pathfile,id,label,diagnostic=False,endpoints=None):
 options=[];raw={}
 for id,label,f in variants:
  feat,points=feature(1,f,id,label);options.append(feat);raw[id]=points
-features=[copy.deepcopy(options[3])]
+features=[copy.deepcopy(next(f for f in options if f['properties']['id']=='D'))]
 for day,pathfile in [(2,'day2-lambda-0.001.bin'),(3,'day3-lambda-0.001.bin'),(4,'day4-lambda-0.001.bin'),(5,'day5-lambda-0.001.bin')]:
  f,points=feature(day,pathfile,str(day),'Least steep-ground distance found');features.append(f);raw[str(day)]=points
 f=copy.deepcopy(features[-1]);p=f['properties'];p['day']=6;p['id']='R';p['start'],p['end']=p['end'],p['start'];p['ascent_m'],p['descent_m']=p['descent_m'],p['ascent_m'];p['label']='Reverse of day 5';f['geometry']['coordinates'].reverse();features.append(f);raw['R']=list(reversed(raw['5']));p['retrace']=True
@@ -37,6 +37,7 @@ for id,leg,label,pathfile in [('VP','VP','Direct: least steep ground','extra-VP-
 
 method={'objective':'Minimize horizontal ground distance on terrain slope >15 degrees; compare supported distance/maximum-grade tradeoffs. Below 10 degrees, no heading constraint.','heading_rule':'For slope s > 10 degrees: absolute deviation from uphill OR downhill fall line <= 90 - 3*s degrees.','search':'Direction-aware weighted shortest paths: cost = distance_above_15 + lambda*total_distance, with terrain caps 20,22.5,25,29.9 and sampled lambda values. These are candidate Pareto options, not a certified global resource-constrained optimum.','limits':{'preferred_km':18,'maximum_km':25,'return_alternative_maximum_km':35},'grid':'Terrarium z13, ~8.9 m latitude-corrected cells; 176 primitive travel directions, exact segment/cell clipping. Corner-touching cells must satisfy the cap; positive-length intersections must satisfy the heading rule. Long flat-region moves may use a shorter direction stencil.','day1_under20':'Sub-20-degree alternatives now run Danskehytta to Torsbu. Shorter: 26.961 km; lower exposure: 32.705 km. Both exceed the unchanged 25 km daily limit and remain separate overnight alternatives, not part of the selected six-day GPX.','validation':'Independent Python re-integration of every positive-length segment/cell intersection; all heading-rule excesses <0 degrees. Coordinates retain double precision to preserve tight heading margins.','scope':'Terrain-only model; snow, ice, avalanche exposure and obstacles not modeled.'}
 data={'type':'FeatureCollection','name':'Tafjord ski trek — steep-ground exposure and fall-line constraint','method':method,'features':features,'day1_options':options,'diagnostics':diagnostics,'day6_options':returns,'additional_routes':additional}
+data['terrain_validation']={'warning': 'C and E withdrawn: the 1 m terrain model reveals a cliff missed by the routing DEM. Remaining routes have not been checked against the 1 m model; displayed slopes are coarse-model estimates.', 'report': 'cliff-validation.json', 'rejected_route_ids': ['C', 'E']}
 (out/'exposure-routes.geojson').write_text(json.dumps(data,ensure_ascii=False,separators=(',',':')))
 ns='http://www.topografix.com/GPX/1/1';ET.register_namespace('',ns)
 def gpx(items,path):
