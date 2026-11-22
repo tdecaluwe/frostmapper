@@ -4,8 +4,8 @@ import {equivalent} from 'ol/proj.js'
 import {wrapAndSliceX} from 'ol/extent.js'
 import {DistortionField} from './distortion.js?v=atlas-fast-v2'
 import {ContourPlanClient} from './contour-plan-client.js?v=antarctica-v1'
-import {SourceTileAssembler} from './source-assembler.js?v=progressive-reproj-v1'
-import {enableProgressiveReprojection} from './progressive-reproj-tile.js?v=progressive-reproj-v1'
+import {SourceTileAssembler} from './source-assembler.js?v=transparent-detail-v1'
+import {enableProgressiveReprojection} from './progressive-reproj-tile.js?v=transparent-detail-v1'
 import {ZoomLevelSupervisor} from './zoom-level-supervisor.js?v=antarctica-v1'
 
 function eachSpan(spans,callback){

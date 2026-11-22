@@ -113,6 +113,7 @@ export class AssembledZoomTile extends Tile {
  render(loaded){
   const canvas=document.createElement('canvas');canvas.width=this.width;canvas.height=this.height
   const ctx=canvas.getContext('2d'),[left,bottom,right,top]=this.extent
+  ctx.imageSmoothingEnabled=this.interpolate
   const draw=(zoom,{tile,coord},masked)=>{
    if(tile.getState()!==TileState.LOADED)return
    const image=tile.getImage(),parent=this.grid.getTileCoordExtent(coord),pw=parent[2]-parent[0],ph=parent[3]-parent[1]
@@ -122,6 +123,11 @@ export class AssembledZoomTile extends Tile {
    const dx=(a-left)/(right-left)*this.width,dy=(top-d)/(top-bottom)*this.height,dw=(c-a)/(right-left)*this.width,dh=(d-b)/(top-bottom)*this.height
    ctx.save()
    if(masked){ctx.beginPath();if(ArrayBuffer.isView(this.spans)){for(let i=0;i<this.spans.length;i+=4)if(this.spans[i+3]===zoom)ctx.rect(this.spans[i],this.spans[i+1],this.spans[i+2],1)}else for(const span of this.spans)if(span.zoom===zoom)ctx.rect(span.x,span.y,span.width,span.height||1);ctx.clip()}
+   // A loaded detail image replaces the coarse classification, including its
+   // transparent pixels (e.g. terrain below the steepness threshold). Clearing
+   // only its clipped footprint also preserves neighboring parents and leaves
+   // the fallback intact when a detail tile failed to load.
+   if(masked)ctx.clearRect(dx,dy,dw,dh)
    ctx.drawImage(image,sx,sy,sw,sh,dx,dy,dw,dh);ctx.restore()
   }
   const ordered=loaded.sort((a,b)=>a.zoom-b.zoom)

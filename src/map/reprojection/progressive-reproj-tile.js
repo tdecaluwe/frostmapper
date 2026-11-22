@@ -1,6 +1,6 @@
 import TileState from 'ol/TileState.js'
 import {releaseCanvas} from 'ol/dom.js'
-import {AssembledZoomTile} from './source-assembler.js?v=progressive-reproj-v1'
+import {AssembledZoomTile} from './source-assembler.js?v=transparent-detail-v1'
 
 // ReprojTile normally discards its source tile list after one render. Keep it
 // only for assembled zoom tiles so their in-place refinements can reproject
