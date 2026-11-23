@@ -1,140 +1,133 @@
-# Native Kartverket terrain routing
+# Kartverket terrain routing
 
-The new pipeline is independent of the previous Terrarium search. The native
-UTM32 terrain source is `nhm_dtm_topo_25832`, requested at **1 m** through WCS.
-Only downloaded, valid cells are traversable. Tiles have a one-cell derivative
-halo. Missing terrain never becomes a zero-height or flat shortcut.
+The native UTM32 source is `nhm_dtm_topo_25832`, sampled at **1 m** through
+Kartverket WCS. Unknown cells are closed. Cached height tiles include derivative
+halos. Native slope and exact segment/cell integration handle cost and cliff
+checks. A separate gradient across **10 m** handles direction of travel.
 
-`kartverket-terrain.py` downloads a padded union of the existing candidate
-corridors, retaining native heights and centidegree-rounded-up 1 m slopes.
-`kartverket-heading.py` builds a separate fall-line field: height differences
-across **10 m** in each direction. This leaves native cliff checks untouched.
-`kartverket-search.cpp` searches a mesh, integrating cost and constraints over
-**every intersected native cell**, rather than testing only graph vertices.
-`kartverket-validate.py` independently recomputes slopes, headings and metrics
-from the original float heights using segment/cell clipping.
+## One objective
 
-## Objective
-
-Let `s` be terrain slope in degrees and `g = tan(s)` its rise/run grade.
-The current cost per horizontal metre is the user's linear/exponential model:
+For terrain slope `s`, let `g = tan(s)` be rise/run grade, independently of
+track direction. Integrate this cost over horizontal track distance:
 
 ```
-cost = 1 + P * (10*g + 6**(5*g - 1) - 1/6)
+cost per metre = 1 + 10*g + 6**(5*g - 1) - 1/6
 ```
 
-`P=1` is the specified formula. A stronger penalty can generate proposal
-seeds, but every published candidate is refined and scored using `P=1`. The subtraction makes flat terrain cost exactly its horizontal
-distance. There is no low-slope cutoff. This replaces the earlier quadratic
-proposal and intentionally has a nonzero derivative at flat terrain.
-The full expression scales with distance, so sampling and segmentation do
-not introduce a fixed per-edge penalty. Grade is terrain rise/run, not track
-incline; 30% is `0.30`, approximately 16.7 degrees.
+Flat terrain costs its distance; there is no low-slope cutoff. All published
+minima use the same objective. Above 10 degrees in the 10 m gradient field,
+the track must stay within `90 - 3*s` degrees of either fall-line direction.
+A common 45-degree native slope ceiling is retained from the previous model.
+It is a search constraint, not a skiing suitability claim.
 
-The 10 m heading field must satisfy `deviation <= 90 - 3 * slope` where its
-slope exceeds 10 degrees; either uphill or downhill is acceptable. The maximum
-slope cap and cost use native 1 m slope. Search quantization is conservative;
-validation reports unrounded native values.
+## Find a minimum before applying eligibility limits
 
-## Scope and bounds
+The old 25/35 km cutoffs and distance pressure are **not** used in minimum
+refinement. Named valleys are starting suggestions, not mandatory waypoints.
 
-The mesh and finite corridor coverage mean these are discrete candidates,
-not a global continuous optimum. A failed search does not establish that no
-field route exists. A* minimizes the terrain cost plus a tunable distance pressure. When the
-lowest-cost route is too long, the driver increases that pressure and keeps
-qualifying alternatives. It does not discard a more expensive short arrival
-just because a cheap long arrival reached the same node first. This is a
-Lagrangian candidate search, not an exact multi-label resource-constrained
-optimum. `kartverket-geographic.py` re-scores native-verified proposal geometries under
-one common objective, refines them locally and removes geographical duplicates. Returned tracks must pass native checks
-and the actual distance limit before publication. Compare candidates under
-18 km when available; hard daily limit 25 km, optional Tjønnebu returns 35 km.
-A sub-20-degree first-night alternative, when found, ends at Torsbu and is
-separate. The current search did not find one; archived coarse-model tracks
-must not be reused as if they had passed the new terrain checks.
+`kartverket-basin.cpp` searches the entire route at once in a sparse graph:
 
-The terrain model describes ground, not snow cover. Neither ice nor avalanche
-assessment is included. These remain planning candidates.
+1. Build a corridor around the current polyline, retaining both hut endpoints.
+2. Search shortest cost with a 4 m mesh throughout a 600 m neighborhood and
+   a 1 m mesh within 20 m of the complete polyline. All edges integrate every
+   crossed native cell. No intermediate point is pinned.
+3. Replace the route when cost improves by more than `max(0.25, 0.0002*cost)`
+   equivalent metres, rebuild the corridor and repeat.
+4. Once stable, repeat with **1200 m / 60 m** widths. If this finds a decrease,
+   resume descent and recheck. Publication requires a final wider/finer pass
+   with no qualifying decrease. Hitting the iteration limit fails the search.
 
-## Running
+Corridor radii describe rasterized vertex disks; broad stamps are padded
+to enclose segments between samples.
 
-Python tools use the offline NumPy/Pillow stack and GDAL already used by the
-previous analysis. No new browser dependencies or server are introduced.
-Caches and large working rasters stay outside the deployed repository.
+Search slope codes round upward to 0.01 degrees; independently reported
+metrics use the unrounded gradient.
 
-```
+The input route remains available in the graph and supplies an upper bound.
+A* uses ground distance as an admissible lower bound. Its search is purely
+cost based; it does not discard a cheaper arrival for being longer. Sparse
+row intervals store dense and coarse runs without allocating the entire
+bounding rectangle. No large raster or graph is shipped to the browser.
+
+This certifies a finite **mixed-mesh corridor neighborhood**, not every
+continuous curve, every missing terrain region or a global optimum. Native
+cell checking does not turn the 4 m search mesh into a global 1 m search.
+The 1 m band permits small whole-route changes; the outer mesh tests much
+larger detours. Metadata records every pass and its tolerance, dimensions,
+node counts and time. Independent validation recomputes native gradients
+and route metrics from the cached float heights.
+
+`kartverket-discover-minima.py` uses the previous named/alternative proposals,
+an unrestricted cost-search seed, and a near-distance-only seed. Additional
+geographically different cached proposals are explored, up to seven seeds per
+leg. Every seed descends under the same cost. This is a multistart heuristic,
+not exhaustive enumeration. Reverse routes have the same minima because both
+the cost and the bidirectional fall-line constraint are symmetric.
+
+## Which minima warrant an option?
+
+`MinimumPolicy` in `kartverket-minima.py` owns the configurable selection rules.
+Apply them separately to each pair of endpoints, **after convergence**:
+
+- Let `L` be the shortest length among all converged minima found, including
+  candidates later merged or rejected by cost. Accept lengths at most **2L**.
+  Recompute this when a shorter minimum is discovered.
+- Let `C` be the best cost among those length-eligible minima. Require cost at
+  most **1.35C**. This initial 35% quality budget is an explicit heuristic.
+- Compare routes using 25 m chainage samples. The separation threshold is
+  `max(150 m, min(500 m, 0.025L))`. **Both** routes must have at least 15% of
+  their length beyond that threshold, including a continuous run at least
+  `max(750 m, 0.12L)` long. A short spike or one-sided loop fails.
+- Process candidates from lowest cost upward and merge geographic duplicates
+  into the cheapest representative. There is no quota that forces two options.
+
+This combines a repeatable local-minimum check, relative cost quality and
+substantial geometric separation. It is not a mathematical saddle-height or
+homotopy classification. All seed outcomes, rejections and reference values
+are recorded in `minimum-summary.json` and exported in `kartverket-analysis.json`.
+
+## Reproduce
+
+Offline tools use Python, NumPy/SciPy/Pillow, GDAL and a C++ compiler. These
+are not browser dependencies. From the repository root:
+
+```sh
 python3 tools/ski-trek/kartverket-terrain.py WORKING_DIRECTORY data/ski-trek/kartverket-coverage.json
 python3 tools/ski-trek/kartverket-heading.py WORKING_DIRECTORY
 g++ -O3 -std=c++17 tools/ski-trek/kartverket-search.cpp -o WORKING_DIRECTORY/search
-python3 tools/ski-trek/kartverket-routes.py WORKING_DIRECTORY PREVIOUS_WORKING_DIRECTORY
-python3 tools/ski-trek/kartverket-returns.py WORKING_DIRECTORY PREVIOUS_WORKING_DIRECTORY
-g++ -O3 -std=c++17 tools/ski-trek/kartverket-local.cpp -o WORKING_DIRECTORY/local
-python3 tools/ski-trek/kartverket-geographic.py WORKING_DIRECTORY
-python3 tools/ski-trek/kartverket-via-huts.py WORKING_DIRECTORY PREVIOUS_WORKING_DIRECTORY
-python3 tools/ski-trek/kartverket-geographic.py WORKING_DIRECTORY
-g++ -O3 -std=c++17 tools/ski-trek/kartverket-corridor.cpp -o WORKING_DIRECTORY/corridor
-python3 tools/ski-trek/kartverket-named-corridors.py WORKING_DIRECTORY
+g++ -O3 -std=c++17 tools/ski-trek/kartverket-basin.cpp -o WORKING_DIRECTORY/basin
+python3 tools/ski-trek/kartverket-discover-minima.py WORKING_DIRECTORY
 python3 tools/ski-trek/kartverket-export.py WORKING_DIRECTORY OUTPUT_DIRECTORY
-python3 tests/kartverket-routing.py
+python3 tests/kartverket-minima.py
+python3 tests/kartverket-data.py
 ```
 
-## Local stability and geography
+A fresh terrain working directory bootstraps hut positions, displayed route
+seeds and the shortest-reference seeds from the deployed JSON/GeoJSON. An existing working directory can also supply
+previous binary candidates from `kartverket-routes.py`,
+`kartverket-geographic.py` and `kartverket-named-corridors.py`. Those older
+tools are **seed generators**;
+their fixed limits or pinned checkpoints do not define final minima. An
+existing `before-minima-manifest.json` preserves the original seed manifest.
+Descent caches are keyed by input geometry, the minimum-search executable
+and algorithm, grid metadata and downloaded tile inventory. If slope or
+heading rasters are rebuilt with changed preparation logic, clear the
+`minimum-*.json` records before rerunning descent.
+The exact tile inventory is in `kartverket-coverage.json`.
+`minimum-reference-seeds.json` retains the shortest found minimum for each
+leg as compact, checksummed native-grid deltas. These are revalidated starting
+seeds, not extra displayed options. This preserves a shorter reference even
+when geographic merging chooses a slightly longer, cheaper representative.
 
-The final candidates share a 45-degree native one-metre slope ceiling and
-identical fall-line rules. The under-20-degree first-night diagnostic uses
-its own stricter ceiling. The 45-degree ceiling is a search constraint, not
-a statement about skiing suitability; actual maxima are reported separately.
-
-`kartverket-local.cpp` refines overlapping 1 km windows inside a 300 m
-neighborhood at 4 m search spacing, then 100 m windows inside a 25 m
-neighborhood at 1 m spacing. It repeats until neither scale improves the
-route meaningfully. The relative tolerance is 0.5% of window cost; the
-absolute tolerances are 2 equivalent metres and 0.25 equivalent metres,
-respectively. Local distance-constrained cases use a Pareto-label search
-when Lagrangian bounds cannot certify the window. The Pareto search has an
-explicit five-million-label limit; exceeding it fails the check rather than
-claiming convergence. Macro refinement skips the endpoint neighborhoods
-already searched at 1 m; checkpoints are aligned to the coarse grid.
-
-Only converged candidates with no unresolved window checks are published.
-This is a finite, explicitly defined local-optimality check, not a proof about
-every continuous curve or every possible rerouting neighborhood.
-
-Geographic alternatives must have a continuous section at least 1 km long
-that is at least 500 m from the other corridor (checked in both directions).
-Proposal waypoints and exclusion circles are removed during refinement.
-Candidates that collapse into the same corridor are discarded. These
-thresholds reject cosmetic variations; they do not classify named valleys
-or establish topological equivalence.
-
-The exact downloaded tile inventory is retained in `kartverket-coverage.json`.
-Working elevation arrays, intermediate proposal routes and caches are not
-shipped to the browser. The deployed app reads static native-validated tracks.
-
-## Named corridors and elevation profiles
-
-`kartverket-named-corridors.py` uses ordered circular regions on the same
-native-cell graph. Region crossings are optimized jointly, then retained as
-checkpoints during local refinement. These are constrained local candidates;
-the local test does not optimize checkpoint locations again. Official SSR
-place coordinates and identifiers are in `route-landmarks.json`.
-
-The active first-day candidate passes Styggedalen. The northern alternative
-has no verified result. Day 2 passes the Veltdalsvatnet valley and Kupevatnet;
-day 3 uses the valley north of Tordsvatnet, west of Hellarhøa. Jervebua–Mebua
-first climbs toward Istjønna (approximately 242 m elevation gain to the initial
-region), then passes 995 m from Midthøa. The complete candidate is 17.25 km.
-The native search did not establish a geographically distinct Tjønnebu return;
-the published return follows the outward corridor in reverse.
+## Profiles and display
 
 `elevation-profile.py` resamples heights at 5 m horizontal chainage, smooths
-with a 10 m Gaussian kernel, retains endpoint heights and counts reversals
-with 3 m hysteresis. This suppresses raster-scale noise in ascent/descent
-without accumulating every one-metre oscillation. Raw totals remain in route
-metadata. Profiles and filtered totals are exported together. Native terrain
-maxima and route cost are computed independently of this smoothing.
+with a 10 m Gaussian kernel and counts reversals with 3 m hysteresis. Endpoint
+heights are retained and raw gain/loss remain in the GeoJSON. Profile smoothing
+does not change the native slope field or routing cost.
 
-Clicking a route opens its bottom details panel and elevation profile. Profile
-inspection places a marker on the track; overlapping routes have a selector.
-The compact menu retains route visibility and selection. Six-day GPX export
-uses the selected daily candidates. Tracks retain alternating 1 km opacity.
+Click a track for its metrics, profile and GPX. Overlapping tracks have a route
+selector. The selected six-day GPX uses the chosen daily variants. Rendering
+keeps alternating 1 km opacity. The steepness overlay still uses Terrarium;
+it is a different terrain model from these tracks. Snow, ice and avalanche
+assessment are outside the cost calculation.

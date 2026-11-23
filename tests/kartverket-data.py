@@ -1,6 +1,7 @@
 """Structural checks on published native-data routes and their downloadable GPX."""
 from pathlib import Path
-import json,math,xml.etree.ElementTree as ET
+import base64,hashlib,json,math,zlib,xml.etree.ElementTree as ET
+import numpy as np
 root=Path(__file__).resolve().parents[1]/'data/ski-trek'
 data=json.loads((root/'exposure-routes.geojson').read_text())
 assert 'Kartverket' in data['method']['source']
@@ -13,8 +14,18 @@ for key in ('features','day1_options','day6_options','diagnostics','additional_r
   assert p['maximum_angle_rule_excess_deg']<=1e-5
   assert p['heading_scale_m']==10 and p['max_slope_deg']<=p['slope_cap_deg']+1e-5
   assert len(coords)>=2 and all(len(c)==3 and all(math.isfinite(v) for v in c) for c in coords)
-  limit=35 if p['day']==6 or p.get('over_daily_limit') else 25
-  assert p['distance_km']<=limit+1e-5
+  selection=p.get('minimum_selection')
+  if selection:
+   assert p['distance_km']*1000<=selection['maximum_distance_m']+.01
+   assert selection['maximum_distance_m']==2*selection['shortest_minimum_m']
+   assert p['weighted_cost_m']<=selection['maximum_cost_m']+.01
+   local=p['local_optimum'];assert local['converged']
+   last=local['passes'][-1];assert not last['improved'] and last['coarse_radius_m']==1200 and last['fine_radius_m']==60
+   assert all(not r['distance_constrained'] and r['pinned_intermediate_points']==0 for r in local['passes'])
+   assert not p['corridor_constraints']
+  else:
+   limit=35 if p['day']==6 or p.get('over_daily_limit') else 25
+   assert p['distance_km']<=limit+1e-5
   if p.get('download'):assert (root/p['download']).is_file()
 if data['plan_complete']:
  ordered=sorted(data['features'],key=lambda f:f['properties']['day'])
@@ -31,15 +42,16 @@ for file in ['exposure-trek.gpx','day1-exposure-options.gpx','return-exposure-op
   assert len(trk.findall('.//g:trkpt',ns))>=2
 print(f'Native metadata, distance/heading limits, itinerary continuity and GPX checked for {len(features)} route records')
 
-# Requested named corridors are entered in order, including the initial JM climb.
+# Named valleys are initial guesses, never pinned constraints in the new model.
 by_id={f['properties']['id']:f for f in features}
-for route_id in ('1b','2','3','JM'):
- checks=by_id[route_id]['properties']['constraint_checks']
- assert checks and all(c['minimum_distance_m']<=c['radius_m'] for c in checks)
- assert [c['path_index'] for c in checks]==sorted(c['path_index'] for c in checks)
-jm=by_id['JM']['properties']
-assert jm['initial_climb_toward_istjonna_m']>50
-assert jm['midthoa_distance_m']<=1000
+if data['method']['limits'].get('maximum_length_ratio'):
+ assert data['method']['limits']['maximum_length_ratio']==2
+ assert all(not f['properties']['corridor_constraints'] for f in features)
+else:
+ for route_id in ('1b','2','3','JM'):
+  checks=by_id[route_id]['properties']['constraint_checks']
+  assert checks and all(c['minimum_distance_m']<=c['radius_m'] for c in checks)
+  assert [c['path_index'] for c in checks]==sorted(c['path_index'] for c in checks)
 for f in features:
  p=f['properties'];profile=data['profiles'][p['profile_id']]
  ds,hs=profile['distance_m'],profile['elevation_m']
@@ -49,4 +61,15 @@ for f in features:
  assert abs(ds[-1]-p['distance_km']*1000)<.02
  assert abs(profile['ascent_m']-profile['descent_m']-(hs[-1]-hs[0]))<.03
  assert p['ascent_m']<=p['ascent_raw_m']+.1
-print('Ordered named corridors, initial climb, summit distance and elevation profiles checked')
+print('Minimum eligibility, unpinned descent and elevation profiles checked')
+
+if (root/'minimum-reference-seeds.json').exists():
+ archive=json.loads((root/'minimum-reference-seeds.json').read_text());analysis=json.loads((root/'kartverket-analysis.json').read_text());reports={r['leg']:r for r in analysis['minimum_discovery']}
+ for reference in archive['seeds']:
+  delta=np.frombuffer(zlib.decompress(base64.b64decode(reference['deltas'])),np.int8).reshape(-1,2);anchor=np.array(reference['anchor'],np.int32);points=np.vstack([anchor,anchor+np.cumsum(delta,axis=0,dtype=np.int32)])
+  assert hashlib.sha256(points.astype('<i4',copy=False).tobytes()).hexdigest()==reference['sha256']
+  assert np.all(points>=0) and np.all(points[:,0]<archive['grid']['height']) and np.all(points[:,1]<archive['grid']['width'])
+  distance=float(np.hypot(*delta.astype(float).T).sum())
+  assert abs(distance-reference['distance_km']*1000)<.02
+  assert abs(distance-reports[reference['leg']]['shortest_minimum_m'])<.02
+ print('Shortest-reference seed checksums, geometry lengths and persisted distance limits checked')
