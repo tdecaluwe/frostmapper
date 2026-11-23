@@ -26,6 +26,7 @@ export class RouteDetailsPanel {
   for(const [label,value] of [['Distance',`${p.distance_km.toFixed(1)} km`],['Ascent',metres(p.ascent_m)],['Descent',metres(p.descent_m)],['Terrain max · 1 m',`${p.max_slope_deg.toFixed(1)}°`],['Ground above 15°',metres(p.distance_above_15_m)],['Cost equivalent',`${(p.weighted_cost_m/1000).toFixed(1)} km`]]){const item=node('div');item.append(node('dt',label),node('dd',value));this.metrics.append(item)}
   this.use.hidden=!canUse;this.use.disabled=isSelected;this.use.textContent=isSelected?`Selected for day ${p.day}`:`Use for day ${p.day}`;this.download.href=url;this.download.download=`frostmapper-${p.id}.gpx`
   this.note.textContent='Kartverket 1 m terrain. Gain: 5 m sampling, 10 m Gaussian smoothing, 3 m reversal threshold.'
+  if(p.minimum_selection)this.note.textContent+=` Minimum search: length limit ${(p.minimum_selection.maximum_distance_m/1000).toFixed(1)} km (2× shortest minimum); cost ≤${Math.round(p.minimum_selection.maximum_cost_m/p.minimum_selection.best_cost_m*100)}% of best.`
   if(p.constraint_checks?.length)this.description.textContent+=` · ${p.constraint_checks.map(c=>c.name==='Midthøa'?`${c.name}: ${Math.round(c.minimum_distance_m)} m`:c.name).join(' · ')}`
   this.root.hidden=false;document.body.classList.add('route-details-open');this.readout.textContent='';this.inspected=null;this.draw()
  }

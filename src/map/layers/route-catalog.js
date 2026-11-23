@@ -6,8 +6,10 @@ export class RouteCatalog {
   this.data=data;this.routes=new Map();this.selected=Array.from({length:6},()=>null);this.planURL=null
   for(const list of ['features','day1_options','day6_options','diagnostics','additional_routes'])for(const f of data[list]||[])this.routes.set(f.properties.id,f)
   for(const f of data.features)this.selected[f.properties.day-1]=f.properties.id
+  this.identities=new Map();for(const [id,route] of this.routes){const key=route.properties.minimum_id||id;if(!this.identities.has(key))this.identities.set(key,[]);this.identities.get(key).push(id)}
  }
  get(id){return this.routes.get(id)}
+ identical(id){return this.identities.get(this.get(id)?.properties.minimum_id||id)||[id]}
  profile(id){const route=this.get(id);return this.data.profiles?.[route?.properties.profile_id||id]}
  canSelect(id){const p=this.get(id)?.properties,current=p?.day?this.get(this.selected[p.day-1])?.properties:null;return Boolean(p&&p.day>=1&&p.day<=6&&!p.different_endpoint&&current&&p.start===current.start&&p.end===current.end)}
  select(id){if(!this.canSelect(id))return false;this.selected[this.get(id).properties.day-1]=id;this.clearPlanURL();return true}

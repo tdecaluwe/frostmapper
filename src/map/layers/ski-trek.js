@@ -1,8 +1,8 @@
 import {transform,transformExtent} from 'ol/proj.js'
 import {createMapView} from '../projections/view.js?v=viewport-model'
 import {kilometreSegments,trackDistance} from './track-segments.js'
-import {RouteCatalog} from './route-catalog.js?v=route-pane-v1'
-import {RouteDetailsPanel} from './route-details.js?v=route-pane-v1'
+import {RouteCatalog} from './route-catalog.js?v=route-minima-v1'
+import {RouteDetailsPanel} from './route-details.js?v=route-minima-v1'
 import Feature from 'ol/Feature.js'
 import Overlay from 'ol/Overlay.js'
 import Point from 'ol/geom/Point.js'
@@ -16,7 +16,7 @@ import Fill from 'ol/style/Fill.js'
 import CircleStyle from 'ol/style/Circle.js'
 
 const COLORS=['#b02a37','#165dce','#8a3daa','#b05b00','#087b53','#087b53']
-const VARIANTS={'1a':'#b02a37','1b':'#8651b8',D3B:'#b07330',D4B:'#357a60',VP:'#3571b3',VJ:'#266a4d',JM:'#a16e18',JMB:'#ab286f',R:'#087b53',RF:'#087b53',RG:'#ab286f'}
+const VARIANTS={'1a':'#b02a37','1b':'#8651b8',D2B:'#b05b00',D3B:'#b07330',D5B:'#ab286f',D5C:'#9b7517',D4B:'#357a60',VP:'#3571b3',VJ:'#266a4d',JM:'#a16e18',JMB:'#ab286f',R:'#087b53',RF:'#087b53',RG:'#ab286f'}
 const node=(tag,text,className)=>{const e=document.createElement(tag);if(text)e.textContent=text;if(className)e.className=className;return e}
 
 // Map rendering and hit selection are separate from itinerary data and the pane.
@@ -27,9 +27,9 @@ export class SkiTrekLayer {
   this.styles=new Map();this.visible=new Set();this.inputs=new Map();this.marker=null;this.routeURL=null;this.activeId=null
   this.panel=new RouteDetailsPanel({onChoose:id=>this.inspect(id,this.hitIds),onClose:()=>{if(this.routeURL)URL.revokeObjectURL(this.routeURL);this.routeURL=null;this.activeId=null;this.clearMarker();this.rebuild()},onFit:id=>this.fitRoute(id),onUse:id=>{this.catalog.select(id);this.visible.add(id);this.rebuild();this.inspect(id)},onDistance:d=>this.inspectDistance(d)})
   this.createControls();map.on('change:view',()=>this.rebuild())
-  map.on('singleclick',event=>{const ids=[];map.forEachFeatureAtPixel(event.pixel,f=>{const id=f.get('routeId');if(id&&!ids.includes(id))ids.push(id)},{layerFilter:layer=>layer===this.layer,hitTolerance:matchMedia('(pointer:coarse)').matches?12:7});if(ids.length){const id=ids.includes(this.activeId)?this.activeId:ids.find(id=>this.catalog.selected.includes(id))||ids[0];this.inspect(id,ids)}})
+  map.on('singleclick',event=>{const ids=[];map.forEachFeatureAtPixel(event.pixel,f=>{const id=f.get('routeId');if(id)for(const peer of this.catalog.identical(id))if(this.visible.has(peer)&&!ids.includes(peer))ids.push(peer)},{layerFilter:layer=>layer===this.layer,hitTolerance:matchMedia('(pointer:coarse)').matches?12:7});if(ids.length){const id=ids.includes(this.activeId)?this.activeId:ids.find(id=>this.catalog.selected.includes(id))||ids[0];this.inspect(id,ids)}})
   map.on('pointermove',event=>{if(event.dragging||event.originalEvent.pointerType==='touch')return;this.pointer=event.pixel;if(this.hoverFrame)return;this.hoverFrame=requestAnimationFrame(()=>{this.hoverFrame=null;const hit=map.forEachFeatureAtPixel(this.pointer,f=>Boolean(f.get('routeId')),{layerFilter:layer=>layer===this.layer,hitTolerance:6});map.getViewport().style.cursor=hit?'pointer':''})})
-  fetch(new URL('../../../data/ski-trek/exposure-routes.geojson?v=named-corridors-v1',import.meta.url)).then(r=>{if(!r.ok)throw Error('Tracks unavailable');return r.json()}).then(data=>this.load(data)).catch(error=>{this.status.textContent=error.message})
+  fetch(new URL('../../../data/ski-trek/exposure-routes.geojson?v=route-minima-v1',import.meta.url)).then(r=>{if(!r.ok)throw Error('Tracks unavailable');return r.json()}).then(data=>this.load(data)).catch(error=>{this.status.textContent=error.message})
  }
  createControls(){
   const container=node('div'),row=node('div',null,'trek-row'),label=node('label');this.toggle=node('input');this.toggle.type='checkbox';this.toggle.checked=true;label.append(this.toggle,' Ski trek')
@@ -39,11 +39,11 @@ export class SkiTrekLayer {
   this.status=node('small');this.status.setAttribute('role','status');container.append(row,this.menu,this.plan,this.status);document.querySelector('#layers').append(container)
   this.toggle.addEventListener('change',()=>this.layer.setVisible(this.toggle.checked));this.show.addEventListener('click',()=>{this.toggle.checked=true;this.layer.setVisible(true);this.fit(this.source.getExtent())})
  }
- color(route){return VARIANTS[route.properties.id]||COLORS[Math.max(0,(route.properties.day||1)-1)]||'#8050a0'}
+ color(route){if(route.properties.day===6&&route.properties.minimum_id){const peer=this.catalog?.identical(route.properties.id).map(id=>this.catalog.get(id)).find(f=>f.properties.day===5);if(peer)return this.color(peer)}return VARIANTS[route.properties.id]||COLORS[Math.max(0,(route.properties.day||1)-1)]||'#8050a0'}
  label(route){const p=route.properties;return p.day?`${/^1[ab]$/.test(p.id)?p.id:p.day} · ${p.label.startsWith('Lowest')?`${p.start} → ${p.end}`:p.label}`:`${p.start} → ${p.end}${p.label.startsWith('Lowest')?'':` · ${p.label}`}`}
  load(data){
   this.catalog=new RouteCatalog(data);for(const id of this.catalog.selected)if(id)this.visible.add(id)
-  for(const f of data.day1_options||[])this.visible.add(f.properties.id)
+  for(const f of [...(data.day1_options||[]),...(data.day6_options||[]),...(data.additional_routes||[])])this.visible.add(f.properties.id)
   for(const id of ['VP','VJ','JM'])if(this.catalog.get(id))this.visible.add(id)
   this.show.disabled=false;this.routeList.replaceChildren()
   const routes=[...this.catalog.routes.values()].sort((a,b)=>(a.properties.day||9)-(b.properties.day||9)||a.properties.id.localeCompare(b.properties.id))
@@ -65,15 +65,16 @@ export class SkiTrekLayer {
  rebuild(){
   if(!this.catalog)return;this.source.clear();this.profileOverlay.setPosition(undefined)
   const offsets=[];let distance=0;for(const route of this.catalog.selected.map(id=>this.catalog.get(id))){offsets.push(distance);if(route)distance+=trackDistance(route.geometry.coordinates)}
-  const day5=this.catalog.get(this.catalog.selected[4]),day6=this.catalog.get(this.catalog.selected[5]),shared=day6?.properties.shares_outward_corridor||day6?.properties.retrace
+  const drawn=new Set(),dayLabel=p=>p.day===1?p.id:String(p.day)+(/^(?:D[2-5][B-Z]|R[F-Z])$/.test(p.id)?p.id.at(-1).toLowerCase():'')
   for(const route of this.catalog.routes.values()){
    const p=route.properties;if(!this.visible.has(p.id))continue
-   if(shared&&p.id===day6?.properties.id&&this.activeId!==p.id&&this.visible.has(day5?.properties.id))continue
-   if(shared&&p.id===day5?.properties.id&&this.activeId===day6?.properties.id)continue
-   const offset=p.day?offsets[p.day-1]:p.id.startsWith('JM')&&this.catalog.get('VJ')?trackDistance(this.catalog.get('VJ').geometry.coordinates):p.id.startsWith('VP')?offsets[1]:0
-   const label=shared&&p.id===day5?.properties.id?'5 / 6':p.day?(p.day===1?p.id:String(p.day)+(p.id.endsWith('B')?'b':'')):p.id
-   this.addTrack(route,offset,label)
+   const peers=this.catalog.identical(p.id).filter(id=>this.visible.has(id)),key=p.minimum_id||p.id;if(drawn.has(key))continue;drawn.add(key)
+   const peerRoutes=peers.map(id=>this.catalog.get(id)),chosen=peerRoutes.find(f=>f.properties.id===this.activeId)||peerRoutes.find(f=>f.properties.day===5)||route,q=chosen.properties
+   const offset=q.day?offsets[q.day-1]:q.id.startsWith('JM')&&this.catalog.get('VJ')?trackDistance(this.catalog.get('VJ').geometry.coordinates):q.id.startsWith('VP')?offsets[1]:0
+   const label=peerRoutes.length>1?peerRoutes.map(f=>dayLabel(f.properties)).join(' / '):q.day?dayLabel(q):q.id
+   this.addTrack(chosen,offset,label)
   }
+
   const seen=new Set();for(const route of this.catalog.selectedRoutes())for(const [name,coordinate] of [[route.properties.start,route.geometry.coordinates[0]],[route.properties.end,route.geometry.coordinates.at(-1)]]){if(seen.has(name))continue;seen.add(name);const marker=new Feature(new Point(transform(coordinate,'EPSG:4326',this.map.getView().getProjection())));marker.setStyle(new Style({image:new CircleStyle({radius:4,fill:new Fill({color:'white'}),stroke:new Stroke({color:'#243642',width:2})}),text:new Text({text:name,offsetY:-13,font:'bold 11px system-ui',fill:new Fill({color:'#243642'}),stroke:new Stroke({color:'white',width:3})})}));this.source.addFeature(marker)}
   for(const [id,input] of this.inputs)input.checked=this.visible.has(id)
  }
