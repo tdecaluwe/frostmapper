@@ -10,7 +10,7 @@ import {guardReprojection} from './reprojection-budget.js?v=contour-bands'
 export const ANTARCTIC_SERVICE='https://tiles.arcgis.com/tiles/tPxy1hrFDhJfZ0Mf/arcgis/rest/services/Antarctica_and_the_Southern_Ocean/MapServer'
 export const ANTARCTIC_EXTENT=[-4898635.244666592,-4898635.24466659,4898635.24466659,4898635.244666592]
 export function createAntarcticSource(){
- const source=new XYZ({projection:'EPSG:3031',crossOrigin:'anonymous',wrapX:false,transition:0,maxZoom:13,
+ const source=new XYZ({projection:'EPSG:3031',crossOrigin:'anonymous',wrapX:true,transition:0,maxZoom:13,
   tileGrid:new TileGrid({extent:ANTARCTIC_EXTENT,origin:[-30635955.4472718,30635955.4472718],resolutions:Array.from({length:14},(_,z)=>239343.40193181095/2**z),tileSize:256}),
   url:`${ANTARCTIC_SERVICE}/tile/{z}/{y}/{x}`,
   attributions:'<a href="https://data.bas.ac.uk/maps/5001">Antarctica and the Southern Ocean basemap, British Antarctic Survey</a> (OGL 3.0)'

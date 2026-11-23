@@ -48,5 +48,5 @@ addSteepnessLayer(map,contourReprojection)
 import {addSkiTrek} from './map/layers/ski-trek.js?v=route-pane-v1'
 addSkiTrek(map)
 
-import {addAntarcticaLayer} from './map/layers/antarctica.js'
+import {addAntarcticaLayer} from './map/layers/antarctica.js?v=wrap-v1'
 addAntarcticaLayer(map)
