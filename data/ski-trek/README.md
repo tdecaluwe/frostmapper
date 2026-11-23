@@ -1,4 +1,4 @@
-> Archived earlier objective. The current map uses the [exposure and fall-line model](EXPOSURE.md).
+> Archived earlier objective. The current map uses the [native Kartverket terrain-cost model](EXPOSURE.md).
 
 # Tafjordfjella ski trek: terrain minimax analysis
 

@@ -1,0 +1,74 @@
+{
+  "Styggedalen": {
+    "name": "Styggedalen",
+    "stedsnummer": 800100,
+    "lon": 7.68765,
+    "lat": 62.11165,
+    "source": "https://ws.geonorge.no/stedsnavn/v1/sted/800100",
+    "x": 431517.709016561,
+    "y": 6887311.41485521
+  },
+  "Kupevatnet": {
+    "name": "Kupevatnet",
+    "stedsnummer": 860226,
+    "lon": 7.79645,
+    "lat": 62.10884,
+    "source": "https://ws.geonorge.no/stedsnavn/v1/sted/860226",
+    "x": 437188.910881547,
+    "y": 6886888.22887682
+  },
+  "Fremste Veltdalsvatnet": {
+    "name": "Fremste Veltdalsvatnet",
+    "stedsnummer": 860238,
+    "lon": 7.77007,
+    "lat": 62.13065,
+    "source": "https://ws.geonorge.no/stedsnavn/v1/sted/860238",
+    "x": 435858.407999606,
+    "y": 6889343.45399646
+  },
+  "Heimste Veltdalsvatnet": {
+    "name": "Heimste Veltdalsvatnet",
+    "stedsnummer": 617110,
+    "lon": 7.72676,
+    "lat": 62.15156,
+    "source": "https://ws.geonorge.no/stedsnavn/v1/sted/617110",
+    "x": 433645.738068993,
+    "y": 6891716.1918196
+  },
+  "Tordsvatnet": {
+    "name": "Tordsvatnet",
+    "stedsnummer": 557207,
+    "lon": 7.82365,
+    "lat": 62.15037,
+    "source": "https://ws.geonorge.no/stedsnavn/v1/sted/557207",
+    "x": 438692.288859108,
+    "y": 6891488.19259315
+  },
+  "Hellarhøa": {
+    "name": "Hellarhøa",
+    "stedsnummer": 617196,
+    "lon": 7.83718,
+    "lat": 62.19309,
+    "source": "https://ws.geonorge.no/stedsnavn/v1/sted/617196",
+    "x": 439482.794682695,
+    "y": 6896234.08182392
+  },
+  "Istjønna": {
+    "name": "Istjønna",
+    "stedsnummer": 921206,
+    "lon": 7.82856,
+    "lat": 62.32868,
+    "source": "https://ws.geonorge.no/stedsnavn/v1/sted/921206",
+    "x": 439307.56577361,
+    "y": 6911345.81175628
+  },
+  "Midthøa": {
+    "name": "Midthøa",
+    "stedsnummer": 739201,
+    "lon": 7.87704,
+    "lat": 62.31155,
+    "source": "https://ws.geonorge.no/stedsnavn/v1/sted/739201",
+    "x": 441786.009835234,
+    "y": 6909393.09005187
+  }
+}

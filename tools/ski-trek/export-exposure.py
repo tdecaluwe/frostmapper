@@ -3,6 +3,9 @@ import json,math,copy,xml.etree.ElementTree as ET
 import numpy as np
 from importlib.machinery import SourceFileLoader
 root=Path(__import__('sys').argv[1]);out=Path(__import__('sys').argv[2]);m=json.loads((root/'meta.json').read_text());h=np.load(root/'height.npy',mmap_mode='r');analyzer=SourceFileLoader('analysis',str(Path(__file__).with_name('analyze-exposure.py'))).load_module();world=256*2**m['z']
+if (out/'exposure-routes.geojson').exists():
+ current=json.loads((out/'exposure-routes.geojson').read_text())
+ if 'Kartverket' in current.get('method',{}).get('source',''):raise RuntimeError('Refusing to replace Kartverket routes with the archived Terrarium analysis; choose a separate output directory')
 variants=[('A','Shorter day','day1-cap-29.9-lambda-0.5.bin'),('B','Lower peak slope, under 18 km','day1-cap-25-lambda-0.5.bin'),('D','Least steep-ground distance found','day1-cap-29.9-lambda-0.02.bin')]
 def coordinates(points):
  return [[float((int(x)+m['xmin']*256+.5)/world*360-180),float(math.degrees(math.atan(math.sinh(math.pi*(1-2*(int(y)+m['ymin']*256+.5)/world))))),float(h[y,x])] for y,x in points]

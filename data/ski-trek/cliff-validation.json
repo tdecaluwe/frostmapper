@@ -20,7 +20,7 @@
   "validation_method": "Central-difference terrain slope from the 1 m DTM; sample original route at approximately 0.5 m intervals within 500 m of the reported location. Maximum is a local raster-cell estimate, not a surveyed cliff angle.",
   "wcs_coverage": "nhm_dtm_topo_25832",
   "wcs_request": "https://wcs.geonorge.no/skwms1/wcs.hoyde-dtm-nhm-25832?service=WCS&request=GetCoverage&version=1.0.0&coverage=nhm_dtm_topo_25832&crs=EPSG:25832&bbox=429624.260359638,6890946.36163513,430824.260359638,6892146.36163513&resx=1&resy=1&format=GeoTIFF",
-  "remaining_routes": "Not validated against the 1 m terrain model; reported slope metrics describe the coarse routing model.",
+  "remaining_routes": "At withdrawal, the remaining Terrarium routes were not validated against the 1 m terrain model. Current native-data replacements are described in kartverket-analysis.json.",
   "rejected_segment": [
     [
       7.662019729614258,
@@ -30,5 +30,6 @@
       7.660818099975586,
       62.150630058197265
     ]
-  ]
+  ],
+  "superseded_by": "kartverket-analysis.json"
 }
