@@ -99,3 +99,16 @@ body.route-details-open #navigation .options-content{max-height:calc(100dvh - va
 /* The map owns the viewport; rotated layer canvases must not widen the page. */
 html,body,#map{overflow:hidden;}
 body{position:fixed;inset:0;}
+.snow-season-panel{padding:.15rem 0 .4rem;}
+.snow-season-panel[hidden]{display:none;}
+.snow-season-panel select{width:100%;font:inherit;padding:.25rem;border:1px solid #bfc9cd;border-radius:2px;background:white;color:inherit;}
+.snow-season-gradient{height:8px;margin-top:.4rem;background:linear-gradient(to right,#ffffcc,#a1dab4,#41b6c4,#2c7fb8,#253494);}
+.snow-season-legend{display:flex;justify-content:space-between;font-size:10px;margin:.15rem 0 .3rem;}
+.snow-season-panel small{display:block;font-size:11px;line-height:1.4;margin:.2rem 0;}
+.snow-season-note{color:#56646b;}
+#navigation .snow-season-retry{width:auto;height:auto;font:inherit;padding:4px 8px;}
+#navigation .snow-season-retry[hidden]{display:none;}
+.snow-season-panel small{overflow-wrap:anywhere;}
+.snow-season-map-readout{position:absolute;left:.6rem;bottom:3.5rem;z-index:3;max-width:min(24rem,calc(100vw - 5rem));box-sizing:border-box;padding:.4rem .6rem;background:#fffffff2;border-radius:.25rem;box-shadow:0 1px 6px #0003;font:12px/1.4 system-ui;pointer-events:none;}
+.snow-season-map-readout[hidden]{display:none;}
+body.route-details-open .snow-season-map-readout{bottom:calc(var(--route-panel-height,310px) + 3.5rem);}
