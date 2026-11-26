@@ -28,11 +28,11 @@ export class SnowSeasonLayer{
   panel.append(selector)
   const gradient=document.createElement('div');gradient.className='snow-season-gradient';gradient.setAttribute('aria-hidden','true');panel.append(gradient)
   const legend=document.createElement('div');legend.className='snow-season-legend';panel.append(legend)
-  const status=document.createElement('small');status.id='snow-season-status';status.setAttribute('role','status');panel.append(status)
+  const status=document.createElement('small');status.id='snow-season-status';status.className='snow-season-status';status.setAttribute('role','status');status.textContent='Starting background snow collection…'
   const readout=document.createElement('div');readout.id='snow-season-readout';readout.className='snow-season-map-readout';readout.hidden=true;readout.setAttribute('role','status');document.body.append(readout)
-  const retry=document.createElement('button');retry.type='button';retry.textContent='Retry';retry.className='snow-season-retry';retry.hidden=true;panel.append(retry)
+  const retry=document.createElement('button');retry.type='button';retry.textContent='Retry';retry.className='snow-season-retry';retry.hidden=true
   const cohort=new SnowSeasonEstimator().cohort,note=document.createElement('small');note.className='snow-season-note';note.textContent=`NVE · 1 km · ${cohort.firstEndYear}–${cohort.lastEndYear} winters. 95% per endpoint.`;panel.append(note)
-  root.append(panel);document.querySelector('#layers').append(root)
+  root.append(status,retry,panel);document.querySelector('#layers').append(root)
   Object.assign(this,{toggle,panel,selector,gradient,legend,status,readout,retry})
   toggle.addEventListener('change',()=>this.enable());selector.addEventListener('change',()=>{this.metric=selector.value;const url=new URL(location.href);url.searchParams.set('snow',this.metric);history.replaceState(null,'',url);this.updateLegend();this.redraw()});show.addEventListener('click',()=>{toggle.checked=true;this.enable();this.showData()});retry.addEventListener('click',()=>this.updateView(true))
   this.updateLegend()
@@ -63,7 +63,7 @@ export class SnowSeasonLayer{
  }
  ensureWorker(){
   if(this.worker)return true
-  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-chunks-v2',import.meta.url),{type:'module'})}catch{this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
+  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-chunks-v3',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
   this.worker.onmessage=({data})=>{
    if(data.id&&this.requests.has(data.id)){
     const pending=this.requests.get(data.id);this.requests.delete(data.id)
@@ -71,11 +71,14 @@ export class SnowSeasonLayer{
     return
    }
    if(data.type==='chunks')this.source.chunksChanged(data.keys)
-   else if(data.type==='progress'&&!data.paused)this.status.textContent=`${data.completed.toLocaleString()} / ${data.total.toLocaleString()} queued cells${data.active?' · background calculation':' · tap the map for dates'}`
-   else if(data.type==='error'){this.status.textContent=`Snow data unavailable: ${data.message}`;this.retry.hidden=false}
+   else if(data.type==='progress'&&!data.paused){
+    this.retry.hidden=true;this.status.dataset.state=data.active?'collecting':'idle'
+    this.status.textContent=data.total?`Snow data: ${data.completed.toLocaleString()} / ${data.total.toLocaleString()} cells${data.active?` · fetching ${data.active}`:' · cached'}`:'Snow data: move to Norway or Sweden to collect'
+   }
+   else if(data.type==='error'){this.status.dataset.state='error';this.status.textContent=`Snow data unavailable: ${data.message}`;this.retry.hidden=false}
   }
   this.worker.onerror=()=>{
-   this.status.textContent='Snow worker unavailable';this.retry.hidden=false
+   this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false
    for(const pending of this.requests.values())pending.reject(new Error('Snow worker unavailable'))
    this.requests.clear();this.worker.terminate();this.worker=null
   }
@@ -87,7 +90,7 @@ export class SnowSeasonLayer{
   return new Promise((resolve,reject)=>{this.requests.set(id,{resolve,reject});this.worker.postMessage({...payload,type,id})})
  }
  updateView(retry=false){
-  this.retry.hidden=true;this.readout.hidden=true;const view=this.map.getView();let extent=null
+  if(retry)this.retry.hidden=true;this.readout.hidden=true;const view=this.map.getView();let extent=null
   try{extent=transformExtent(view.calculateExtent(this.map.getSize()),view.getProjection(),'EPSG:32633',16);if(!extent.every(Number.isFinite))extent=null}catch{}
   this.grid={extent};if(!this.ensureWorker())return
   // Collection is independent of layer visibility. The worker retains previous jobs.

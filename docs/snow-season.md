@@ -142,7 +142,9 @@ cm to mm before estimating; missing codes are preserved. A full 7,305-day
 history was checked against the raw GTS feed and matched every value.
 
 `NveBrowserSnowDepthSource` uses that service without a proxy or backend.
-Collection runs in the background **even when the layer is hidden**. Visible
+Collection runs in the background **even when the layer is hidden**. In the
+map menu, the snow-data progress line and retry button remain visible below
+the checkbox; only display settings collapse when the layer is hidden. Visible
 native cells have first priority, followed by the active area's chunks, then
 previously queued chunks. Panning reprioritizes pending work without cancelling
 up to four in-flight histories or discarding completed cells. Broad views queue

@@ -112,3 +112,9 @@ body{position:fixed;inset:0;}
 .snow-season-map-readout{position:absolute;left:.6rem;bottom:3.5rem;z-index:3;max-width:min(24rem,calc(100vw - 5rem));box-sizing:border-box;padding:.4rem .6rem;background:#fffffff2;border-radius:.25rem;box-shadow:0 1px 6px #0003;font:12px/1.4 system-ui;pointer-events:none;}
 .snow-season-map-readout[hidden]{display:none;}
 body.route-details-open .snow-season-map-readout{bottom:calc(var(--route-panel-height,310px) + 3.5rem);}
+
+.snow-season-status{display:block;margin:.15rem 0 .3rem;font-size:11px;line-height:1.4;color:#56646b;overflow-wrap:anywhere;}
+.snow-season-status[data-state="collecting"]::before{content:"";display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:50%;background:#24845a;}
+.snow-season-status[data-state="error"]{color:#a33625;}
+.snow-season-retry{font:inherit;padding:2px 6px;}
+.snow-season-retry[hidden]{display:none;}
