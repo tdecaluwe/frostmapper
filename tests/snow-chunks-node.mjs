@@ -41,3 +41,44 @@ test('derived 100x100 tiles aggregate scalar values, preserve unknowns, and shar
  const start=await renderSnowTile(store,{z:4,x:0,y:0,metric:'start'});assert.equal(start[3],255);assert.equal(start[100*4+3],0);assert.notDeepEqual([...start.subarray(0,3)],[...native.subarray(0,3)])
  await assert.rejects(()=>renderSnowTile(store,{z:5,x:0,y:0,metric:'length'}))
 })
+
+import {SnowCollectionQueue} from '../src/map/snow-season/collection-queue.js'
+function seededRandom(seed=12345){return ()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296}}
+test('queue credits cached cells in bulk and never samples known, reserved or completed cells',()=>{
+ const c=emptyChunk(0,0);c.known.fill(255)
+ const pending=[0,31,32,63,64,150,800,900,9999]
+ for(const i of pending)c.known[i>>>3]&=~(1<<(i&7))
+ const q=new SnowCollectionQueue({random:seededRandom()});q.addChunk(c);assert.equal(q.total,10000);assert.equal(q.completed,9991)
+ const cells=[];for(let i=0;i<pending.length;i++)cells.push(q.take())
+ assert.equal(q.take(),null);assert.equal(new Set(cells.map(c=>c.key)).size,pending.length)
+ assert.deepEqual(cells.map(c=>chunkCell(c.key).index).sort((a,b)=>a-b),pending)
+ for(const cell of cells){q.complete(cell);q.complete(cell)}
+ assert.equal(q.completed,10000);assert.equal(q.take(),null)
+})
+test('queue preserves visible priority across pans and makes failed reservations available again',()=>{
+ const q=new SnowCollectionQueue({random:seededRandom()}),a=emptyChunk(0,0),b=emptyChunk(5,5);q.addChunk(a);q.addChunk(b)
+ q.setViewport(displayTileExtent(4,0,0));const old=q.take();assert.equal(chunkCell(old.key).cx,0)
+ q.setViewport(displayTileExtent(4,5,5));const current=q.take();assert.equal(chunkCell(current.key).cx,5)
+ q.retry(current);assert.equal(q.completed,0);assert.equal(q.reserved.size,1)
+ const job=q.jobs.get('5/5'),index=chunkCell(current.key).index;assert.ok(job.pending[index>>>5]&(1<<(index&31)))
+ q.complete(old);assert.equal(q.completed,1)
+ for(let i=0;i<100;i++){const c=q.take();assert.equal(chunkCell(c.key).cx,5);q.complete(c)}
+})
+test('random coverage reaches the viewport edges with only a mild centre bias',()=>{
+ let central=0;const quadrants=[0,0,0,0]
+ for(let trial=0;trial<200;trial++){
+  const q=new SnowCollectionQueue({random:seededRandom(901+trial)});q.setViewport(displayTileExtent(4,0,0));q.addChunk(emptyChunk(0,0))
+  for(let i=0;i<100;i++){const c=q.take(),index=chunkCell(c.key).index,col=index%100,row=Math.floor(index/100);if(col>=25&&col<75&&row>=25&&row<75)central++;quadrants[Number(col>=50)+2*Number(row>=50)]++;q.complete(c)}
+ }
+ assert.ok(central/20000>.275&&central/20000<.32,`central share ${central/20000}`)
+ assert.ok(quadrants.every(n=>n>4500&&n<5500),`quadrants ${quadrants}`)
+})
+test('queue handles partial edge chunks, clipped viewports and a completely cached domain',()=>{
+ const q=new SnowCollectionQueue({random:seededRandom()}),edge=emptyChunk(11,15);edge.known.fill(255);q.setViewport(displayTileExtent(4,11,15));q.addChunk(edge);assert.equal(q.total,95*50);assert.equal(q.completed,95*50);assert.equal(q.take(),null)
+ const r=new SnowCollectionQueue({random:seededRandom()});r.addChunk(emptyChunk(0,0));r.setViewport([-75000,7999500,-74500,8000000]);const only=r.take();assert.equal(chunkCell(only.key).index,0);assert.equal(r.take({background:false}),null);r.complete(only);assert.ok(r.take())
+})
+test('wide views sample across distant visible chunks rather than a central crop',()=>{
+ const q=new SnowCollectionQueue({random:seededRandom(2026)});q.setViewport([-75000,7300000,625000,8000000]);q.addChunk(emptyChunk(0,0));q.addChunk(emptyChunk(6,6));let left=0,right=0
+ for(let i=0;i<100;i++){const cell=q.take();if(chunkCell(cell.key).cx===0)left++;else right++;q.complete(cell)}
+ assert.ok(left>30&&right>30,`visible chunks ${left}/${right}`)
+})

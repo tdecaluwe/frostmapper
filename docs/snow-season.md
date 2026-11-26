@@ -80,6 +80,7 @@ advertised theme start date.
 - `chunk-grid.js`: stable 100×100 native-cell blocks and display tile geometry.
 - `store.js`: IndexedDB v2 `chunks` store, partial-block persistence, bounded
   decoded memory, 30-day expiry and read-through migration of legacy summaries.
+- `collection-queue.js`: pending-cell bitsets and weighted random viewport sampling.
 - `season-worker.js`: four concurrent cell jobs, active-view priority, retained
   background work, estimation, caching and display tile requests.
 - `tile-renderer.js`: worker-side aggregation of cached native cells into display
@@ -144,9 +145,19 @@ history was checked against the raw GTS feed and matched every value.
 `NveBrowserSnowDepthSource` uses that service without a proxy or backend.
 Collection runs in the background **even when the layer is hidden**. In the
 map menu, the snow-data progress line and retry button remain visible below
-the checkbox; only display settings collapse when the layer is hidden. Visible
-native cells have first priority, followed by the active area's chunks, then
-previously queued chunks. Panning reprioritizes pending work without cancelling
+the checkbox; only display settings collapse when the layer is hidden.
+
+Pending visible native cells have first priority. Selection is random without
+replacement across the entire viewport, with a smooth weighting giving the
+centre up to 1.5 times the baseline odds.
+After the viewport is filled, remaining queued cells are sampled randomly in
+the background. A chunk's known-cell mask initializes its pending bitset in
+bulk: cached cells immediately count toward the same ready-cell tally as new
+downloads and never enter the sampling pool. Reservations clear pending bits
+before dispatch, preventing duplicate in-flight requests. Legacy summaries are
+also migrated in bulk before a chunk enters the queue.
+
+Panning reprioritizes pending work without cancelling
 up to four in-flight histories or discarding completed cells. Broad views queue
 chunks lazily rather than allocating a job object for every native cell.
 Failures pause collection for 30 seconds and retain the queue for retry.
@@ -208,6 +219,6 @@ Set `PLAYWRIGHT_MODULE`, `OL_NODE_MODULES`, and optionally `CHROMIUM_PATH` when
 those tools are outside normal Node resolution. `SNOW_TEST_ARTIFACTS` enables
 screenshots and JSON results. The runner serves fixtures locally and mocks NVE
 histories. It checks hidden-layer collection, four-request concurrency, new-area
-priority, legacy migration, compressed partial-block persistence, reload reuse,
+priority, immediate credit for 5,000 pre-cached cells without refetching, legacy migration, compressed partial-block persistence, reload reuse,
 coarse display tiles and actual Web Mercator reprojection on an iPhone-sized
 viewport. No historical dataset is included or fetched by this test.

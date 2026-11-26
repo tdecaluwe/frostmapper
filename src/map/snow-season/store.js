@@ -4,7 +4,7 @@ const EXPIRY=30*86400000
 /** Encoded 100x100 blocks only; raw historical time series never reach IndexedDB. */
 export class SnowSeasonStore{
  constructor(namespace,{maximum=512,onChange=()=>{}}={}){
-  Object.assign(this,{namespace,maximum,onChange});this.memory=new Map();this.loading=new Map();this.dirty=new Set();this.database=null;this.timer=null;this.writes=0;this.serial=Promise.resolve();this.hasLegacy=false
+  Object.assign(this,{namespace,maximum,onChange});this.memory=new Map();this.loading=new Map();this.dirty=new Set();this.database=null;this.timer=null;this.writes=0;this.serial=Promise.resolve();this.hasLegacy=false;this.legacy=null
  }
  async open(){
   if(this.database)return this.database
@@ -16,6 +16,21 @@ export class SnowSeasonStore{
    request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>db.close();if(db.objectStoreNames.contains('summaries')){const count=db.transaction('summaries').objectStore('summaries').count();count.onsuccess=()=>{this.hasLegacy=count.result>0;finish(db)};count.onerror=()=>finish(db)}else finish(db)}
    request.onerror=()=>finish(null);request.onblocked=()=>finish(null)
   });return this.database
+ }
+ async legacyChunks(){
+  if(!this.hasLegacy)return new Map()
+  if(!this.legacy)this.legacy=(async()=>{
+   const db=await this.open(),prefix=`${this.namespace}/`,index=new Map()
+   const entries=await new Promise(resolve=>{const r=db.transaction('summaries').objectStore('summaries').getAll(IDBKeyRange.bound(prefix,prefix+'\uffff'));r.onsuccess=()=>resolve(r.result);r.onerror=()=>resolve([])})
+   for(const entry of entries){
+    if(Date.now()-entry.used>=EXPIRY)continue
+    const address=chunkCell(entry.id.slice(prefix.length))
+    if(!index.has(address.key))index.set(address.key,[])
+    index.get(address.key).push({index:address.index,value:entry.value})
+   }
+   return index
+  })()
+  return this.legacy
  }
  id(key){return `${this.namespace}/${key}`}
  trim(keep){
@@ -29,21 +44,25 @@ export class SnowSeasonStore{
    const db=await this.open();let chunk=null
    if(db){const stored=await new Promise(resolve=>{const request=db.transaction('chunks').objectStore('chunks').get(this.id(key));request.onsuccess=()=>resolve(request.result);request.onerror=()=>resolve(null)})
     if(stored&&Date.now()-stored.updated<EXPIRY)try{chunk=await decompressChunk(stored.payload);if(chunk.cx!==cx||chunk.cy!==cy)chunk=null}catch{/* Invalid cache entries are recomputed. */}}
-   chunk??=emptyChunk(cx,cy);this.memory.set(key,chunk);this.trim(key);return chunk
+   chunk??=emptyChunk(cx,cy)
+   const legacy=await this.legacyChunks(),entries=legacy.get(key)
+   if(entries){
+    for(const entry of entries)if(!hasCell(chunk,entry.index))setChunkCell(chunk,entry.index,entry.value)
+    legacy.delete(key);this.dirty.add(key);this.onChange({cx,cy,key});this.scheduleFlush()
+   }
+   this.memory.set(key,chunk);this.trim(key);return chunk
   })().finally(()=>this.loading.delete(key));this.loading.set(key,pending);return pending
  }
  async get(key){
   const address=chunkCell(key),chunk=await this.getChunk(address.cx,address.cy)
-  if(hasCell(chunk,address.index))return chunkRecord(chunk,address.index)
-  const db=await this.open();if(!db||!this.hasLegacy)return null
-  const old=await new Promise(resolve=>{const r=db.transaction('summaries').objectStore('summaries').get(this.id(key));r.onsuccess=()=>resolve(r.result&&Date.now()-r.result.used<EXPIRY?r.result.value:null);r.onerror=()=>resolve(null)})
-  if(old)await this.put(key,old);return old
+  return chunkRecord(chunk,address.index)
  }
  async put(key,record){
   const address=chunkCell(key),chunk=await this.getChunk(address.cx,address.cy)
   setChunkCell(chunk,address.index,record);this.memory.set(address.key,chunk);this.dirty.add(address.key);this.onChange(address)
-  if(!this.timer){this.timer=setTimeout(()=>{this.timer=null;this.flush()},2000);this.timer.unref?.()}
+  this.scheduleFlush()
  }
+ scheduleFlush(){if(!this.timer){this.timer=setTimeout(()=>{this.timer=null;this.flush()},2000);this.timer.unref?.()}}
  flush(){
   if(this.timer){clearTimeout(this.timer);this.timer=null}
   this.serial=this.serial.catch(()=>{}).then(async()=>{
