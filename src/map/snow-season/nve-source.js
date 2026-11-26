@@ -32,7 +32,7 @@ export function snowPresence(depth,{minimumDepthMm=0,swe=null}={}){
  * export its small summaries to static files for the deployed map.
  */
 export class NveSnowDepthSource{
- constructor({fetchImpl=globalThis.fetch,baseUrl=NVE_GTS_URL}={}){this.fetch=fetchImpl;this.baseUrl=baseUrl.replace(/\/$/,'')}
+ constructor({fetchImpl=(...args)=>globalThis.fetch(...args),baseUrl=NVE_GTS_URL}={}){this.fetch=fetchImpl;this.baseUrl=baseUrl.replace(/\/$/,'')}
  async series({x,y,startDate,endDate,theme='sd'}){
   if(!Number.isFinite(x)||!Number.isFinite(y)||!['sd','swe'].includes(theme))throw new TypeError('Invalid source query')
   if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate)||!/^\d{4}-\d{2}-\d{2}$/.test(endDate)||startDate>endDate)throw new TypeError('Invalid date range')
@@ -73,7 +73,7 @@ export function browserSeries(data,{x,y,startDate,endDate,theme}){
  return {Theme:theme,X:x,Y:y,Altitude:data.MASL,Unit:'mm',TimeResolution:1440,NoDataValue:null,StartDate:apiDate(startDate),EndDate:apiDate(endDate),Data:data.MapGridValue.map(v=>valid(v,data.NoDataValue)?v*scale:null)}
 }
 export class NveBrowserSnowDepthSource extends NveSnowDepthSource{
- constructor({fetchImpl=globalThis.fetch,endpoint=NVE_BROWSER_URL}={}){super({fetchImpl});this.endpoint=endpoint}
+ constructor({fetchImpl=(...args)=>globalThis.fetch(...args),endpoint=NVE_BROWSER_URL}={}){super({fetchImpl});this.endpoint=endpoint}
  async series({x,y,startDate,endDate,theme='sd'}){
   if(!Number.isFinite(x)||!Number.isFinite(y)||!['sd','swe'].includes(theme))throw new TypeError('Invalid source query')
   if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate)||!/^\d{4}-\d{2}-\d{2}$/.test(endDate)||startDate>endDate)throw new TypeError('Invalid date range')

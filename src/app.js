@@ -51,5 +51,5 @@ addSkiTrek(map)
 import {addAntarcticaLayer} from './map/layers/antarctica.js?v=wrap-v1'
 addAntarcticaLayer(map)
 
-import {addSnowSeasonLayer} from './map/layers/snow-season.js?v=snow-season-v1'
+import {addSnowSeasonLayer} from './map/layers/snow-season.js?v=snow-chunks-v2'
 addSnowSeasonLayer(map)

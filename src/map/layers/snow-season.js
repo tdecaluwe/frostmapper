@@ -1,20 +1,21 @@
-import ImageLayer from 'ol/layer/Image.js'
+import TileLayer from 'ol/layer/Tile.js'
 import proj4 from 'proj4'
 import {register} from 'ol/proj/proj4.js'
 import {get as getProjection,transform,transformExtent} from 'ol/proj.js'
 import {createMapView} from '../projections/view.js?v=viewport-model'
 import {SnowSeasonRasterSource} from '../snow-season/raster-source.js'
-import {visibleSnowCells,SNOW_EXTENT,cellKey,cachedSnowExtent} from '../snow-season/grid.js'
+import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js'
 import {SnowSeasonEstimator} from '../snow-season/season-estimator.js'
 
 export class SnowSeasonLayer{
  constructor(map){
-  this.map=map;this.records=new Map();this.generation=0;this.metric='length';this.grid=null;this.timer=null;this.worker=null
+  this.map=map;this.generation=0;this.metric='length';this.grid=null;this.worker=null;this.requests=new Map();this.requestId=0;this.inspectionId=0
   proj4.defs('EPSG:32633','+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs');register(proj4);getProjection('EPSG:32633').setExtent(SNOW_EXTENT)
-  this.source=new SnowSeasonRasterSource();this.layer=new ImageLayer({source:this.source,visible:false,opacity:.6,zIndex:9});this.layer.set('name','snow-season');map.addLayer(this.layer)
+  this.source=new SnowSeasonRasterSource(tile=>this.request('render',tile));this.layer=new TileLayer({source:this.source,visible:false,opacity:.6,zIndex:9,preload:1});this.layer.set('name','snow-season');map.addLayer(this.layer)
   this.createControls();map.on('moveend',()=>this.updateView());map.on('change:view',()=>this.updateView());map.on('singleclick',event=>this.inspect(event.coordinate))
   const selected=new URL(location.href).searchParams.get('snow')
   if(['1','length','start','end'].includes(selected)){this.toggle.checked=true;if(selected!=='1'){this.metric=selected;this.selector.value=selected}this.enable()}
+  this.updateView();addEventListener('pagehide',()=>this.worker?.postMessage({type:'flush'}))
  }
  createControls(){
   const root=document.createElement('div');root.id='snow-season-controls'
@@ -33,7 +34,7 @@ export class SnowSeasonLayer{
   const cohort=new SnowSeasonEstimator().cohort,note=document.createElement('small');note.className='snow-season-note';note.textContent=`NVE · 1 km · ${cohort.firstEndYear}–${cohort.lastEndYear} winters. 95% per endpoint.`;panel.append(note)
   root.append(panel);document.querySelector('#layers').append(root)
   Object.assign(this,{toggle,panel,selector,gradient,legend,status,readout,retry})
-  toggle.addEventListener('change',()=>this.enable());selector.addEventListener('change',()=>{this.metric=selector.value;const url=new URL(location.href);url.searchParams.set('snow',this.metric);history.replaceState(null,'',url);this.updateLegend();this.redraw()});show.addEventListener('click',()=>{toggle.checked=true;this.enable();this.showData()});retry.addEventListener('click',()=>this.updateView())
+  toggle.addEventListener('change',()=>this.enable());selector.addEventListener('change',()=>{this.metric=selector.value;const url=new URL(location.href);url.searchParams.set('snow',this.metric);history.replaceState(null,'',url);this.updateLegend();this.redraw()});show.addEventListener('click',()=>{toggle.checked=true;this.enable();this.showData()});retry.addEventListener('click',()=>this.updateView(true))
   this.updateLegend()
  }
  updateLegend(){
@@ -44,8 +45,7 @@ export class SnowSeasonLayer{
  enable(){
   this.panel.hidden=!this.toggle.checked;this.layer.setVisible(this.toggle.checked)
   const url=new URL(location.href);if(this.toggle.checked)url.searchParams.set('snow',this.metric);else url.searchParams.delete('snow');history.replaceState(null,'',url)
-  if(this.toggle.checked){this.updateView();if(!this.grid?.extent)this.showData()}
-  else {this.readout.hidden=true;this.worker?.postMessage({type:'view',generation:++this.generation,cells:[]});this.retry.hidden=true}
+  this.redraw();if(this.toggle.checked)this.updateView();else this.readout.hidden=true
  }
  showData(){
   let native
@@ -63,40 +63,50 @@ export class SnowSeasonLayer{
  }
  ensureWorker(){
   if(this.worker)return true
-  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-season-v1',import.meta.url),{type:'module'})}catch{this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
+  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-chunks-v2',import.meta.url),{type:'module'})}catch{this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
   this.worker.onmessage=({data})=>{
-   if(data.generation!==this.generation||!this.toggle.checked)return
-   if(data.type==='cell'){
-    this.records.delete(data.key);this.records.set(data.key,data.value);if(this.records.size>4096)this.records.delete(this.records.keys().next().value)
-    if(!this.timer)this.timer=setTimeout(()=>{this.timer=null;this.redraw()},250)
-   }else if(data.type==='progress'&&!data.failed)this.status.textContent=`${data.completed} / ${data.total} cells${data.completed<data.total?' · calculating…':' · tap the map for dates'}`
+   if(data.id&&this.requests.has(data.id)){
+    const pending=this.requests.get(data.id);this.requests.delete(data.id)
+    if(data.type==='request-error')pending.reject(new Error(data.message));else pending.resolve(data.type==='tile'?data.pixels:data.value)
+    return
+   }
+   if(data.type==='chunks')this.source.chunksChanged(data.keys)
+   else if(data.type==='progress'&&!data.paused)this.status.textContent=`${data.completed.toLocaleString()} / ${data.total.toLocaleString()} queued cells${data.active?' · background calculation':' · tap the map for dates'}`
    else if(data.type==='error'){this.status.textContent=`Snow data unavailable: ${data.message}`;this.retry.hidden=false}
   }
-  this.worker.onerror=()=>{this.status.textContent='Snow worker unavailable';this.retry.hidden=false;this.worker.terminate();this.worker=null}
+  this.worker.onerror=()=>{
+   this.status.textContent='Snow worker unavailable';this.retry.hidden=false
+   for(const pending of this.requests.values())pending.reject(new Error('Snow worker unavailable'))
+   this.requests.clear();this.worker.terminate();this.worker=null
+  }
   return true
  }
- updateView(){
-  if(!this.toggle.checked)return
-  this.retry.hidden=true;this.readout.textContent='';this.readout.hidden=true;const view=this.map.getView()
-  try{this.grid=visibleSnowCells(transformExtent(view.calculateExtent(this.map.getSize()),view.getProjection(),'EPSG:32633',16))}catch{this.grid={cells:[],extent:null,count:0}}
-  if(!this.ensureWorker())return;const cells=this.grid.tooWide?[]:this.grid.cells
-  this.worker.postMessage({type:'view',generation:++this.generation,cells})
-  if(this.grid.tooWide){this.redraw();this.status.textContent='Zoom in to calculate native 1 km snow seasons';return}
-  if(!cells.length){this.source.update(null,this.records,this.metric);this.status.textContent='Outside seNorge coverage';return}
-  this.status.textContent=`0 / ${cells.length} cells · calculating…`;this.redraw()
+ request(type,payload){
+  if(!this.ensureWorker())return Promise.reject(new Error('Snow worker unavailable'))
+  const id=++this.requestId
+  return new Promise((resolve,reject)=>{this.requests.set(id,{resolve,reject});this.worker.postMessage({...payload,type,id})})
  }
- redraw(){const extent=this.grid?.tooWide?cachedSnowExtent(this.records):this.grid?.extent;this.source.update(this.toggle.checked?extent:null,this.records,this.metric)}
- inspect(coordinate){
+ updateView(retry=false){
+  this.retry.hidden=true;this.readout.hidden=true;const view=this.map.getView();let extent=null
+  try{extent=transformExtent(view.calculateExtent(this.map.getSize()),view.getProjection(),'EPSG:32633',16);if(!extent.every(Number.isFinite))extent=null}catch{}
+  this.grid={extent};if(!this.ensureWorker())return
+  // Collection is independent of layer visibility. The worker retains previous jobs.
+  this.worker.postMessage({type:'view',generation:++this.generation,extent,retry})
+ }
+ redraw(){this.source.setMetric(this.metric)}
+ async inspect(coordinate){
   if(!this.toggle.checked)return
   let native;try{native=transform(coordinate,this.map.getView().getProjection(),'EPSG:32633')}catch{return}
-  this.readout.hidden=false
-  const record=this.records.get(cellKey(...native))
+  const inspection=++this.inspectionId;this.readout.hidden=false;this.readout.textContent='Reading snow-season data…'
+  let record;try{record=await this.request('inspect',{key:cellKey(...native)})}catch{if(inspection===this.inspectionId)this.readout.textContent='Snow data unavailable';return}
+  if(inspection!==this.inspectionId||!this.toggle.checked)return
   if(!record){this.readout.textContent='Cell not calculated yet';return}
   if(record.status==='outside-model'){this.readout.textContent='Outside seNorge model coverage';return}
   if(record.days===null){this.readout.textContent='Historical data incomplete in this cell';return}
   if(record.days===0){this.readout.textContent='No common snow-season period';return}
   const date=md=>new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(`2000-${md}T00:00:00Z`))
-  const whole=record.wholeYears;this.readout.textContent=`${record.days} days · ${date(record.start)}–${date(record.end)}. Whole period: ${whole.minimum===whole.maximum?whole.minimum:`${whole.minimum}–${whole.maximum}`}/20 winters.${record.unknownDays?' Some historical days unknown.':''}`
+  const whole=record.wholeYears,coverage=whole?` Whole period: ${whole.minimum===whole.maximum?whole.minimum:`${whole.minimum}–${whole.maximum}`}/20 winters.`:''
+  this.readout.textContent=`${record.days} days · ${date(record.start)}–${date(record.end)}.${coverage}${record.unknownDays?' Some historical days unknown.':''}`
  }
 }
 export function addSnowSeasonLayer(map){return new SnowSeasonLayer(map)}

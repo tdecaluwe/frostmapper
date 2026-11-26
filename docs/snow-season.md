@@ -1,8 +1,8 @@
 # Historical snow-season endpoints
 
 The first snow-season component estimates **separate 95% onset and melt dates**,
-using daily model data from NVE/seNorge. It is a pure JavaScript estimator with a visible OpenLayers image layer, a
-dedicated browser worker, and a private per-browser summary cache. Histories
+using daily model data from NVE/seNorge. It is a pure JavaScript estimator with a tiled OpenLayers display layer, a
+dedicated browser worker, and a private per-browser encoded chunk cache. Histories
 are fetched directly from NVE; no history archive or calculated regional raster
 is distributed by Frostmapper.
 
@@ -72,22 +72,61 @@ advertised theme start date.
 
 ## Responsibilities
 
-- `src/map/snow-season/season-estimator.js`: cohort selection, annual runs,
-  endpoint order statistics, leap-day handling and missing-data bounds. No
-  network, OpenLayers, DOM or application state.
-- `src/map/snow-season/nve-source.js`: raw NVE data, units, missing-value codes,
-  positive SWE evidence and provenance. No seasonal statistics.
-- `src/map/snow-season/season-worker.js`: visible-cell request scheduling (four
-  concurrent cells), cancellation, estimation and caching.
-- `src/map/snow-season/store.js`: bounded IndexedDB summary cache; no raw daily
-  histories. Entries expire after 30 days; cohort/version is part of the key.
-- `src/map/snow-season/grid.js`: native 1 km grid and palettes.
-- `src/map/snow-season/raster-source.js`: small native raster snapshots, rebuilt
-  on results/metric changes. OpenLayers handles projection; the render path
-  performs no history fetching or statistics.
-- `src/map/layers/snow-season.js`: checkbox, length/start/end selector, progress,
-  map readout and viewport selection.
-- `tools/snow-season/sample.mjs`: reproducible offline diagnostic point export.
+- `season-estimator.js`: cohort, annual runs, endpoint quantiles, leap days and
+  uncertainty. No network, OpenLayers or storage.
+- `nve-source.js`: official single-cell daily histories and positive SWE evidence.
+- `chunk-codec.js`: exact two-byte periods, exceptions, pending mask, quality
+  metadata, binary format and browser-native DEFLATE.
+- `chunk-grid.js`: stable 100×100 native-cell blocks and display tile geometry.
+- `store.js`: IndexedDB v2 `chunks` store, partial-block persistence, bounded
+  decoded memory, 30-day expiry and read-through migration of legacy summaries.
+- `season-worker.js`: four concurrent cell jobs, active-view priority, retained
+  background work, estimation, caching and display tile requests.
+- `tile-renderer.js`: worker-side aggregation of cached native cells into display
+  pixels. This never fetches histories.
+- `raster-source.js`: canvas-backed OpenLayers tile source, updated on chunk changes.
+- `layers/snow-season.js`: controls, viewport priority and asynchronous inspection.
+
+### Encoded blocks
+
+Each storage block is 100×100 **native 1 km cells**, aligned to the model's
+northwest corner (-75000, 8000000). Edge blocks retain their 100×100 shape;
+out-of-domain padding is not fetched. A full block has 20,000 date bytes and a
+1,250-byte known-cell bitmap. An unset bit means pending; a known unknown cell
+has a set bit and an unknown code. Quality/uncertainty metadata and exact mean
+lengths (including leap days) are retained separately in the same compressed
+payload. Raw daily series are never stored.
+
+Ordinary periods use `a=startDay`, `b=364-endDay`, `word=a|(b<<8)`.
+For exceptional early/late periods, `large=256-duration` and
+`small=large-boundaryOffset-1`; early uses `(a,b)=(large,small)`, late swaps them.
+Accept the alternative only when `a+b>=365`. Its duration is `256-max(a,b)` and
+its offset is `abs(a-b)-1`. Markers are `FFFF` (no common season), `FEFE`
+(unknown) and `FDFD` (escape). Escaped start/end uint16 pairs follow in row-major
+marker order. Every valid interval is preserved; 64,131 require no escape,
+including every interval up to 37 days. All words are explicitly little endian.
+
+The binary `SSC1` header records dimensions, chunk coordinates, exception count
+and auxiliary metadata length. Browser-native DEFLATE compresses the entire
+payload; a raw fallback is available when CompressionStream is absent. IndexedDB
+stores the compression identifier, payload, namespace and timestamps. The
+namespace includes estimator version, cohort and depth threshold. Up to 512
+compressed blocks are retained across namespaces; decoded clean memory retains
+12 blocks, while dirty blocks remain pinned until saved. Writes are batched.
+
+### Display pyramid
+
+Display tiles are also 100×100 pixels, at 16, 8, 4, 2 and 1 km per pixel.
+At native resolution one display tile matches one storage chunk. Coarser tiles
+aggregate cached native values before applying the palette; they do not average
+colors or request a different upstream dataset. Pixel alpha reflects the known
+valid fraction, and missing/pending cells remain transparent. Zooming beyond
+native resolution enlarges the same native cells.
+
+Both aggregation and history processing run in the worker. OpenLayers receives
+RGBA tiles and handles map reprojection. Metric changes reuse the encoded
+periods. No encoding, IndexedDB access or season calculation enters the main
+OpenLayers render loop.
 
 ## Browser access and full coverage
 
@@ -103,21 +142,23 @@ cm to mm before estimating; missing codes are preserved. A full 7,305-day
 history was checked against the raw GTS feed and matched every value.
 
 `NveBrowserSnowDepthSource` uses that service without a proxy or backend.
-The worker downloads only the requested visible native 1 km cells, with four
-concurrent requests, deduplication and cancellation of departed cells. Computed
-summaries persist in IndexedDB (16,384 entries), with a 4,096-entry memory cache.
-Changing display metric or projection reuses the same geographical cells.
+Collection runs in the background **even when the layer is hidden**. Visible
+native cells have first priority, followed by the active area's chunks, then
+previously queued chunks. Panning reprioritizes pending work without cancelling
+up to four in-flight histories or discarding completed cells. Broad views queue
+chunks lazily rather than allocating a job object for every native cell.
+Failures pause collection for 30 seconds and retain the queue for retry.
 
-Coverage is the full native seNorge model domain, including the covered part of
-Sweden. Bounds from the official `seNorgeGrid/sd` ImageServer metadata are
-`[-75000,6450000,1120000,8000000]` in EPSG:32633. Water/outside-model missing
-cells remain transparent. There is no fixed regional pilot dataset.
+The full native model domain, including the covered part of Sweden, is
+`[-75000,6450000,1120000,8000000]` in EPSG:32633: 1,852,250 cells in 192
+100×100 storage chunks (including partial edge chunks). Model-missing cells
+remain transparent. Previous areas keep filling in the background; there is
+no fixed regional dataset or visibility-dependent collection gate.
 
-Broad views with more than 4,096 native cells show a zoom-in prompt instead of
-starting a large archive download. Cached cells remain visible in the overview.
-The arrow button zooms to an appropriate
-scale. Coverage is not region-limited, but this is a detail layer, not an
-instant national overview. Results appear as individual cells finish.
+A chunk is a local storage unit, **not an upstream batch request**. Filling an
+uncached chunk still requires individual daily histories. Reloads reuse known
+cells, including partial blocks. The derived display layer reads those chunks
+at every display zoom; it never fetches histories itself.
 
 NVE's batch API at `api/MultiPointTimeSeries/ByMapCoordinateCsv` was verified
 with two cells and returns individual histories. It and the legacy raw GTS
@@ -137,7 +178,7 @@ No new runtime dependencies or build tools are required. Use a recent Node.js
 with built-in fetch:
 
 ```sh
-node --test tests/snow-season-node.mjs
+node --test tests/snow-season-node.mjs tests/snow-chunks-node.mjs
 node tools/snow-season/sample.mjs 120450 6908350 trek-season.json
 ```
 
@@ -155,3 +196,16 @@ The first two samples used positive SWE evidence on all three missing depth
 dates. Each fixed full period qualifies in 18/20 years, illustrating the
 separate-endpoint definition. Bergen retains two unresolved dates, but all four
 assignments give zero days, so that conclusion is invariant.
+
+### Browser integration check
+
+`tests/snow-chunks.html` is a small standalone OpenLayers harness. The optional
+`node tests/snow-chunks-browser.cjs` runner uses an existing Playwright install
+and local OpenLayers/proj4 modules; it does not add application dependencies.
+Set `PLAYWRIGHT_MODULE`, `OL_NODE_MODULES`, and optionally `CHROMIUM_PATH` when
+those tools are outside normal Node resolution. `SNOW_TEST_ARTIFACTS` enables
+screenshots and JSON results. The runner serves fixtures locally and mocks NVE
+histories. It checks hidden-layer collection, four-request concurrency, new-area
+priority, legacy migration, compressed partial-block persistence, reload reuse,
+coarse display tiles and actual Web Mercator reprojection on an iPhone-sized
+viewport. No historical dataset is included or fetched by this test.
