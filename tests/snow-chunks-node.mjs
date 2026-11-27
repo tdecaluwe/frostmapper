@@ -35,7 +35,7 @@ test('chunk identity aligns negative eastings, top-down rows, edges and the comp
 })
 test('derived 111x111 tiles aggregate scalar values, preserve unknowns, and share chunk data across levels',async()=>{
  const c=emptyChunk(0,0);setChunkCell(c,0,record);setChunkCell(c,1,{...record,days:100});setChunkCell(c,CHUNK_SIZE,{status:'complete',start:null,end:null,days:0})
- let reads=0;const store={async getChunk(cx,cy){reads++;return cx===0&&cy===0?c:emptyChunk(cx,cy)}}
+ let reads=0;const store={record:chunkRecord,async getChunk(cx,cy){reads++;return cx===0&&cy===0?c:emptyChunk(cx,cy)}}
  const native=await renderSnowTile(store,{z:4,x:0,y:0,metric:'length'});assert.equal(native.length,CHUNK_CELLS*4);assert.equal(native[3],255);assert.equal(native[7],255);assert.equal(native[11],0)
  const coarse=await renderSnowTile(store,{z:3,x:0,y:0,metric:'length'});assert.equal(coarse[3],191);assert.ok(reads>=5)
  const start=await renderSnowTile(store,{z:4,x:0,y:0,metric:'start'});assert.equal(start[3],255);assert.equal(start[CHUNK_SIZE*4+3],0);assert.notDeepEqual([...start.subarray(0,3)],[...native.subarray(0,3)])

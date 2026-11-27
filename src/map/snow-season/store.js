@@ -1,10 +1,10 @@
-import {emptyChunk,setChunkCell,chunkRecord,compressChunk,decompressChunk} from './chunk-codec.js?v=snow-111-37x4-v1'
-import {chunkCell,chunkKey} from './chunk-grid.js?v=snow-111-37x4-v1'
+import {emptyChunk,setChunkCell,chunkRecord,compressChunk,decompressChunk} from './annual-chunk-codec.js?v=snow-depth-v3'
+import {chunkCell,chunkKey} from './chunk-grid.js?v=snow-depth-v3'
 const EXPIRY=30*86400000
 /** Encoded 111x111 blocks only; raw historical time series never reach IndexedDB. */
 export class SnowSeasonStore{
- constructor(namespace,{maximum=512,onChange=()=>{}}={}){
-  Object.assign(this,{namespace,maximum,onChange});this.memory=new Map();this.loading=new Map();this.dirty=new Set();this.database=null;this.timer=null;this.writes=0;this.serial=Promise.resolve()
+ constructor(namespace,{maximum=512,onChange=()=>{},firstEndYear=new Date().getUTCFullYear()-20,years=20}={}){
+  Object.assign(this,{namespace,maximum,onChange,firstEndYear,years});this.memory=new Map();this.loading=new Map();this.dirty=new Set();this.database=null;this.timer=null;this.writes=0;this.serial=Promise.resolve()
  }
  async open(){
   if(this.database)return this.database
@@ -19,7 +19,7 @@ export class SnowSeasonStore{
  }
  id(key){return `${this.namespace}/${key}`}
  trim(keep){
-  for(const [key] of this.memory){if(this.memory.size<=12)break;if(key!==keep&&!this.dirty.has(key))this.memory.delete(key)}
+  for(const [key] of this.memory){if(this.memory.size<=4)break;if(key!==keep&&!this.dirty.has(key))this.memory.delete(key)}
  }
  async getChunk(cx,cy){
   const key=chunkKey(cx,cy)
@@ -28,14 +28,15 @@ export class SnowSeasonStore{
   const pending=(async()=>{
    const db=await this.open();let chunk=null
    if(db){const stored=await new Promise(resolve=>{const request=db.transaction('chunks').objectStore('chunks').get(this.id(key));request.onsuccess=()=>resolve(request.result);request.onerror=()=>resolve(null)})
-    if(stored&&Date.now()-stored.updated<EXPIRY)try{chunk=await decompressChunk(stored.payload);if(chunk.cx!==cx||chunk.cy!==cy)chunk=null}catch{/* Invalid cache entries are recomputed. */}}
-   chunk??=emptyChunk(cx,cy)
+    if(stored&&Date.now()-stored.updated<EXPIRY)try{chunk=await decompressChunk(stored.payload);if(chunk.cx!==cx||chunk.cy!==cy||chunk.firstEndYear!==this.firstEndYear||chunk.years!==this.years)chunk=null}catch{/* Invalid cache entries are recomputed. */}}
+   chunk??=emptyChunk(cx,cy,this)
    this.memory.set(key,chunk);this.trim(key);return chunk
   })().finally(()=>this.loading.delete(key));this.loading.set(key,pending);return pending
  }
- async get(key){
+ record(chunk,index,minimumDepth=0){return chunkRecord(chunk,index,minimumDepth)}
+ async get(key,minimumDepth=0){
   const address=chunkCell(key),chunk=await this.getChunk(address.cx,address.cy)
-  return chunkRecord(chunk,address.index)
+  return this.record(chunk,address.index,minimumDepth)
  }
  async put(key,record){
   const address=chunkCell(key),chunk=await this.getChunk(address.cx,address.cy)

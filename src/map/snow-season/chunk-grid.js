@@ -1,5 +1,5 @@
-import {SNOW_EXTENT,CELL_SIZE,cellKey} from './grid.js?v=snow-111-37x4-v1'
-import {CHUNK_SIZE} from './chunk-codec.js?v=snow-111-37x4-v1'
+import {SNOW_EXTENT,CELL_SIZE,cellKey} from './grid.js?v=snow-depth-v3'
+import {CHUNK_SIZE} from './chunk-codec.js?v=snow-depth-v3'
 export const CHUNK_METRES=CHUNK_SIZE*CELL_SIZE
 export const SNOW_RESOLUTIONS=[16000,8000,4000,2000,1000]
 export const chunkKey=(cx,cy)=>`${cx}/${cy}`

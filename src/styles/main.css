@@ -102,6 +102,9 @@ body{position:fixed;inset:0;}
 .snow-season-panel{padding:.15rem 0 .4rem;}
 .snow-season-panel[hidden]{display:none;}
 .snow-season-panel select{width:100%;font:inherit;padding:.25rem;border:1px solid #bfc9cd;border-radius:2px;background:white;color:inherit;}
+#layers .snow-season-depth-label{display:flex;justify-content:space-between;gap:.5rem;min-height:0;margin-top:.5rem;font-size:11px;}
+.snow-season-depth-label output{font-variant-numeric:tabular-nums;white-space:nowrap;}
+#layers #snow-season-depth{display:block;width:100%;margin:.3rem 0;accent-color:#2c7fb8;}
 .snow-season-gradient{height:8px;margin-top:.4rem;background:linear-gradient(to right,#ffffcc,#a1dab4,#41b6c4,#2c7fb8,#253494);}
 .snow-season-legend{display:flex;justify-content:space-between;font-size:10px;margin:.15rem 0 .3rem;}
 .snow-season-panel small{display:block;font-size:11px;line-height:1.4;margin:.2rem 0;}

@@ -12,14 +12,21 @@ For reference year 2026, use 20 September–August seasons with **ending years
 2006–2025**: 1 September 2005 through 31 August 2025. No 2026 data is included.
 Ending-year labels avoid treating the two halves of winter as separate years.
 
-Snow presence means **raw model snow depth > 0 mm** by default. The depth
-threshold is configurable. Positive depth at this native 1 km resolution does
+The depth slider selects **0, 5, 10, 15 or 20 cm**. Zero means positive
+snow depth; the other minima are inclusive. The preference is saved locally.
+All five thresholds are fetched and calculated together, regardless of the
+selected height or layer visibility. Positive depth at this native 1 km resolution does
 not establish 100% ground coverage within that square. A fractional snow-cover
 requirement would be a separate condition using NVE's `sca` product.
 
 For each season, identify its longest uninterrupted snow-covered run. A real
 snow-free day splits a run. Equal-length runs select the earlier run. A season
 with no snow remains in the 20-year denominator.
+
+The 0 cm interval is the main annual season. For each higher threshold, choose
+the longest uninterrupted run **inside the preceding lower-depth interval**.
+Thus every year has five nested intervals. This intentionally excludes a deeper
+run in a different, shorter snow episode. Empty inner intervals remain empty.
 
 Sort the 20 start dates in seasonal calendar order and choose the 19th
 (second-latest). Sort the 20 last-covered dates and choose the 2nd
@@ -49,8 +56,8 @@ choosing a date that also exists in non-leap years.
 The map reads the numeric NVE seNorge snow archive hosted by MET Norway:
 `https://thredds.met.no/thredds/dodsC/senorge/seNorge_snow/`.
 Its `sd_YYYY.nc` files expose `snow_depth` in centimetres as Float32 arrays.
-The source compares positive depth (or a configured threshold converted to mm)
-without using rendered map colours. The archive uses the same native 1 km UTM
+The source immediately converts centimetres to five threshold bands without
+using rendered map colours. The archive uses the same native 1 km UTM
 zone 33 grid, with rows increasing south-to-north; the source reverses rows for
 our north-to-south tile layout. Browser CORS access is supported. Attribution
 remains NVE/seNorge under NLOD.
@@ -66,12 +73,18 @@ recovers presence, not a depth estimate. Zero SWE remains unknown because of
 quantization; SWE cannot establish a nonzero minimum depth. Valid depth always
 takes precedence over SWE.
 
-Remaining unknown presence values are enumerated as snow/bare assignments, up
-to eight unknown days by default. The estimator returns bounds over every
-assignment. It supplies a single period only if its endpoints are invariant.
-Too many unknown days produce `insufficient-data`, not a shortened reference
-window or a fabricated zero season. Supplementary-service errors preserve this
-uncertainty and are recorded.
+The annual estimator compares the longest run with unresolved days treated as
+bare and covered, inside the already-certain parent interval. Equal winning
+endpoints prove the interval invariant for every intermediate assignment.
+Otherwise that threshold and deeper thresholds remain unknown for the year.
+The cache stores the known prefix length separately, rather than fabricating an
+empty season. A SWE-recovered day is certain at 0 cm and unknown at higher minima.
+
+The 95% summary bounds unknown yearly endpoints by empty/full possibilities.
+A period is displayed only when its endpoints are invariant, or every possibility
+has zero length. Unknown years stay in the denominator and full-period coverage
+is reported as a range. The older `season-estimator.js` remains the independent
+point-diagnostic implementation, including its exhaustive missing-day bounds.
 
 Do not silently combine `sd3h` or `fsm2_sd` with `sd`: they are different data
 products. The sampled FSM2 history did not cover all 20 years despite the
@@ -79,14 +92,18 @@ advertised theme start date.
 
 ## Responsibilities
 
-- `season-estimator.js`: cohort, annual runs, endpoint quantiles, leap days and
-  uncertainty. No network, OpenLayers or storage.
+- `annual-seasons.js`: nested annual runs, known-depth prefixes, endpoint
+  quantiles, uncertainty bounds and leap-day calendar conversion.
+- `season-estimator.js`: cohort and independent point-diagnostic reference.
 - `archive-source.js`: numeric DAP2 windows, shared request pool, packed daily
   states, positive-SWE recovery and in-memory retry checkpoints.
 - `area-grid.js`: 37×37 native fetch geometry and model-edge clipping.
 - `nve-source.js`: point-feed diagnostics and comparison.
-- `chunk-codec.js`: exact two-byte periods, exceptions, pending mask, quality
-  metadata, binary format and browser-native DEFLATE.
+- `interval-codec.js`: bounded arithmetic coding of five half-open intervals
+  into exactly eight bytes, including empty intervals and leap years.
+- `annual-chunk-codec.js`: year-major interval words, three-bit quality prefixes,
+  pending mask, binary format, selected-depth summary cache and native DEFLATE.
+- `chunk-codec.js`: legacy two-byte codec, retained for diagnostic tests.
 - `chunk-grid.js`: 111×111 storage/display geometry.
 - `store.js`: IndexedDB `chunks` store, partial-block persistence, bounded decoded
   memory and 30-day expiry. The new namespace ignores older formats; no migration.
@@ -121,13 +138,12 @@ memory across retries, avoiding an automatic redownload of successful windows.
 A failed request cancels its block's remaining requests and pauses new work for
 30 seconds. Retry can resume earlier.
 
-Daily values are converted to bare/snow/unknown and packed at two bits per day,
-only for uncached cells. A fully uncached 37×37 block needs about 2.5 MB for its
-20-year packed history. Four working histories plus eight maximum-size decoded
-responses total approximately 15.4 MB, excluding cache/render buffers, browser
-network copies and runtime overhead. Calculation and parsing yield regularly
-so worker-side display requests remain responsive. The packed histories are
-released after estimation; only encoded results reach IndexedDB.
+Daily values are packed into nibbles: bare, five positive-depth bands,
+positive-presence/unknown-depth (SWE), and wholly unknown. Histories exist only
+for uncached cells and are never persisted. A full 37×37 history needs about
+5.0 MB. Four histories plus eight maximum-size responses total about 25.4 MB,
+before browser copies, runtime overhead and decoded storage chunks. Parsing and
+calculation yield regularly. The histories are released after estimation.
 
 For cells with up to eight unresolved dates, the worker requests the necessary
 SWE date windows over the same area. Positive SWE establishes snow presence;
@@ -137,28 +153,31 @@ work for retry; they do not silently convert unknown ground to bare ground.
 
 ### Encoded storage blocks
 
-A full storage block has 12,321 cells: 24,642 date bytes and a 1,541-byte known-cell
-bitmap. An unset bit means pending; a known unknown cell has a set bit and the
-unknown code. Exact mean lengths (including leap days), historical coverage
-bounds and quality flags are retained as auxiliary metadata. Archive responses
-do not provide cell altitude; new records leave altitude null.
+Each cell stores 20 annual **eight-byte words**: 160 bytes of interval payload.
+A word represents five nested half-open intervals `[start,end)` in the actual
+September–August year. Equal endpoints mean empty. The endpoint alphabet has
+366 boundaries in a normal year and 367 in a leap year; both fit in 64 bits.
+No leap day or short interval is dropped.
 
-Ordinary periods use `a=startDay`, `b=364-endDay`, `word=a|(b<<8)`.
-For exceptional early/late periods, `large=256-duration` and
-`small=large-boundaryOffset-1`; early uses `(a,b)=(large,small)`, late swaps them.
-Accept the alternative only when `a+b>=365`. Its duration is `256-max(a,b)` and
-its offset is `abs(a-b)-1`. Markers are `FFFF` (no common season), `FEFE`
-(unknown) and `FDFD` (escape). Escaped start/end uint16 pairs follow in row-major
-marker order. Every valid interval is preserved; 64,131 require no escape,
-including every interval up to 37 days. Words are explicitly little endian.
+Words are arranged year-major so spatial neighbours remain adjacent. Separate
+three-bit values record how many leading depth thresholds are certain (0–5),
+and one bit per cell distinguishes fetched from pending. A full 111×111, 20-year
+block is 1,971,360 interval bytes + 92,408 quality bytes + 1,541 known-cell bytes
++ a 32-byte `SSC3` header: **2,065,341 bytes before DEFLATE**. Missing evidence is
+quality information, not an empty interval. No daily histories or per-cell JSON
+summaries reach IndexedDB.
 
-The binary `SSC2` header records dimensions, coordinates, exception count and
-metadata length. Browser-native DEFLATE compresses the payload, with a raw
-fallback. Cache keys include `v2/archive-111`, cohort and depth threshold. Older
-100×100 blocks and legacy summaries are ignored without migration; the disk
-overview still reports their stored bytes. IndexedDB keeps up to 512 blocks
-across namespaces. Decoded clean memory retains 12 blocks; dirty blocks remain
-pinned until saved. Writes are batched and partial chunks survive reloads.
+The arithmetic codec uses a 52-bit bounded state and polynomial run-tail
+batching; it needs no runtime BigInts or lookup tables. Tests check the exact
+finite-precision grid-width bound, empty suffixes and leap-year round trips.
+
+Keys include `v3/annual-depths` and the cohort, but **not** the selected depth.
+Older summaries cannot supply the missing depth/year information, so the new
+namespace is populated afresh without migration. The disk overview still counts
+older stored data. IndexedDB retains up to 512 blocks across namespaces. Four
+clean populated chunks are kept in memory; dirty chunks remain pinned until
+saved. Empty uncached chunks allocate only their known-cell mask. Selected-depth
+summaries use small typed arrays and are invalidated on writes or depth changes.
 
 ### Display and scheduling
 
@@ -179,7 +198,8 @@ work. A fresh format version starts a fresh tally, as requested.
 
 Aggregation, archive decoding, compression and seasonal statistics run in the
 worker. OpenLayers receives RGBA tiles and handles map reprojection. Changing
-metric or projection reuses encoded periods. The snow-data progress line and
+minimum depth, metric or projection reuses the same annual words. The slider
+invalidates display tiles without scheduling a new history download. The snow-data progress line and
 retry control remain visible in the menu when display settings are collapsed.
 
 ## Reproduce
@@ -188,7 +208,7 @@ No new runtime dependencies or build tools are required. Use a recent Node.js
 with built-in fetch:
 
 ```sh
-node --test tests/snow-season-node.mjs tests/snow-chunks-node.mjs tests/snow-archive-node.mjs
+node --test tests/snow-season-node.mjs tests/snow-chunks-node.mjs tests/snow-archive-node.mjs tests/snow-depths-node.mjs
 node tools/snow-season/sample.mjs 120450 6908350 trek-season.json
 ```
 
@@ -216,7 +236,7 @@ and local OpenLayers/proj4 modules. Configure `PLAYWRIGHT_MODULE`,
 screenshots and JSON results. It serves synthetic numeric DAP2 windows locally
 and checks four-month bounds, 37×37 block geometry, eight-request concurrency,
 active-view priority, hidden-layer collection, immediate cache-hit credit,
-111×111 compressed partial chunks, reload reuse, coarse display and actual Web
+111×111 compressed partial chunks, reload reuse, persisted depth selection, depth-dependent pixels and actual Web
 Mercator reprojection on an iPhone-sized viewport. Old formats are explicitly
 ignored; no migration is tested or performed.
 

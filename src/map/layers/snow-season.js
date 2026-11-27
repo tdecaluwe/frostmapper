@@ -3,13 +3,16 @@ import proj4 from 'proj4'
 import {register} from 'ol/proj/proj4.js'
 import {get as getProjection,transform,transformExtent} from 'ol/proj.js'
 import {createMapView} from '../projections/view.js?v=viewport-model'
-import {SnowSeasonRasterSource} from '../snow-season/raster-source.js?v=snow-111-37x4-v1'
-import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js?v=snow-111-37x4-v1'
-import {SnowSeasonEstimator} from '../snow-season/season-estimator.js?v=snow-111-37x4-v1'
+import {SnowSeasonRasterSource} from '../snow-season/raster-source.js?v=snow-depth-v3'
+import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js?v=snow-depth-v3'
+import {SnowSeasonEstimator} from '../snow-season/season-estimator.js?v=snow-depth-v3'
+import {SNOW_DEPTHS_CM} from '../snow-season/depths.js?v=snow-depth-v3'
 
 export class SnowSeasonLayer{
  constructor(map){
   this.map=map;this.generation=0;this.metric='length';this.grid=null;this.worker=null;this.requests=new Map();this.requestId=0;this.inspectionId=0
+  this.minimumDepth=0
+  try{const saved=Number(localStorage.getItem('frostmapper.snowMinimumDepthCm'));if(SNOW_DEPTHS_CM.includes(saved))this.minimumDepth=saved}catch{}
   proj4.defs('EPSG:32633','+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs');register(proj4);getProjection('EPSG:32633').setExtent(SNOW_EXTENT)
   this.source=new SnowSeasonRasterSource(tile=>this.request('render',tile));this.layer=new TileLayer({properties:{storageLabel:'Snow season · 95%',storageId:'snow-season',storageStores:[{database:'frostmapper-snow-seasons',store:'chunks'},{database:'frostmapper-snow-seasons',store:'summaries'}]},source:this.source,visible:false,opacity:.6,zIndex:9,preload:1});this.layer.set('name','snow-season');map.addLayer(this.layer)
   this.createControls();map.on('moveend',()=>this.updateView());map.on('change:view',()=>this.updateView());map.on('singleclick',event=>this.inspect(event.coordinate))
@@ -26,6 +29,12 @@ export class SnowSeasonLayer{
   const selector=document.createElement('select');selector.id='snow-season-metric';selector.setAttribute('aria-label','Snow-season metric')
   for(const [value,text] of [['length','Season length'],['start','Start date (95%)'],['end','End date (95%)']]){const option=document.createElement('option');option.value=value;option.textContent=text;selector.append(option)}
   panel.append(selector)
+  const depthLabel=document.createElement('label');depthLabel.className='snow-season-depth-label';depthLabel.htmlFor='snow-season-depth';depthLabel.append('Minimum snow depth')
+  const depthOutput=document.createElement('output');depthOutput.htmlFor='snow-season-depth';depthLabel.append(depthOutput)
+  const depth=document.createElement('input');depth.type='range';depth.id='snow-season-depth';depth.min='0';depth.max='20';depth.step='5';depth.value=String(this.minimumDepth);depth.setAttribute('aria-label','Minimum snow depth in centimetres');depth.setAttribute('list','snow-depth-stops')
+  const stops=document.createElement('datalist');stops.id='snow-depth-stops'
+  for(const cm of SNOW_DEPTHS_CM){const option=document.createElement('option');option.value=String(cm);option.label=`${cm} cm`;stops.append(option)}
+  panel.append(depthLabel,depth,stops)
   const gradient=document.createElement('div');gradient.className='snow-season-gradient';gradient.setAttribute('aria-hidden','true');panel.append(gradient)
   const legend=document.createElement('div');legend.className='snow-season-legend';panel.append(legend)
   const status=document.createElement('small');status.id='snow-season-status';status.className='snow-season-status';status.setAttribute('role','status');status.textContent='Starting background snow collection…'
@@ -33,10 +42,16 @@ export class SnowSeasonLayer{
   const retry=document.createElement('button');retry.type='button';retry.textContent='Retry';retry.className='snow-season-retry';retry.hidden=true
   const cohort=new SnowSeasonEstimator().cohort,note=document.createElement('small');note.className='snow-season-note';note.textContent=`NVE · 1 km · ${cohort.firstEndYear}–${cohort.lastEndYear} winters. 95% per endpoint.`;panel.append(note)
   root.append(status,retry,panel);document.querySelector('#layers').append(root)
-  Object.assign(this,{toggle,panel,selector,gradient,legend,status,readout,retry})
+  Object.assign(this,{toggle,panel,selector,gradient,legend,status,readout,retry,depth,depthOutput})
+  depth.addEventListener('input',()=>{
+   this.minimumDepth=Number(depth.value);this.inspectionId++;this.readout.hidden=true
+   try{localStorage.setItem('frostmapper.snowMinimumDepthCm',String(this.minimumDepth))}catch{}
+   this.updateDepthLabel();this.redraw()
+  })
   toggle.addEventListener('change',()=>this.enable());selector.addEventListener('change',()=>{this.metric=selector.value;const url=new URL(location.href);url.searchParams.set('snow',this.metric);history.replaceState(null,'',url);this.updateLegend();this.redraw()});show.addEventListener('click',()=>{toggle.checked=true;this.enable();this.showData()});retry.addEventListener('click',()=>this.updateView(true))
-  this.updateLegend()
+  this.updateLegend();this.updateDepthLabel()
  }
+ updateDepthLabel(){const text=this.minimumDepth?`≥ ${this.minimumDepth} cm`:'> 0 cm';this.depthOutput.value=text;this.depth.setAttribute('aria-valuetext',text)}
  updateLegend(){
   this.gradient.style.transform=this.metric==='start'?'scaleX(-1)':''
   const labels=this.metric==='length'?['0','90','180','270','365 days']:['Sep','Dec','Mar','Jun','Aug']
@@ -63,7 +78,7 @@ export class SnowSeasonLayer{
  }
  ensureWorker(){
   if(this.worker)return true
-  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-111-37x4-v1',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
+  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-depth-v3',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
   this.worker.onmessage=({data})=>{
    if(data.id&&this.requests.has(data.id)){
     const pending=this.requests.get(data.id);this.requests.delete(data.id)
@@ -96,12 +111,12 @@ export class SnowSeasonLayer{
   // Collection is independent of layer visibility. The worker retains previous jobs.
   this.worker.postMessage({type:'view',generation:++this.generation,extent,retry})
  }
- redraw(){this.source.setMetric(this.metric)}
+ redraw(){this.source.setDepth(this.minimumDepth);this.source.setMetric(this.metric)}
  async inspect(coordinate){
   if(!this.toggle.checked)return
   let native;try{native=transform(coordinate,this.map.getView().getProjection(),'EPSG:32633')}catch{return}
   const inspection=++this.inspectionId;this.readout.hidden=false;this.readout.textContent='Reading snow-season data…'
-  let record;try{record=await this.request('inspect',{key:cellKey(...native)})}catch{if(inspection===this.inspectionId)this.readout.textContent='Snow data unavailable';return}
+  let record;try{record=await this.request('inspect',{key:cellKey(...native),minimumDepth:this.minimumDepth})}catch{if(inspection===this.inspectionId)this.readout.textContent='Snow data unavailable';return}
   if(inspection!==this.inspectionId||!this.toggle.checked)return
   if(!record){this.readout.textContent='Cell not calculated yet';return}
   if(record.status==='outside-model'){this.readout.textContent='Outside seNorge model coverage';return}
@@ -109,7 +124,7 @@ export class SnowSeasonLayer{
   if(record.days===0){this.readout.textContent='No common snow-season period';return}
   const date=md=>new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',timeZone:'UTC'}).format(new Date(`2000-${md}T00:00:00Z`))
   const whole=record.wholeYears,coverage=whole?` Whole period: ${whole.minimum===whole.maximum?whole.minimum:`${whole.minimum}–${whole.maximum}`}/20 winters.`:''
-  this.readout.textContent=`${record.days} days · ${date(record.start)}–${date(record.end)}.${coverage}${record.unknownDays?' Some historical days unknown.':''}`
+  this.readout.textContent=`${this.minimumDepth?`≥ ${this.minimumDepth}`:'> 0'} cm · ${record.days} days · ${date(record.start)}–${date(record.end)}.${coverage}${record.unknownYears?' Some winters have incomplete depth data.':''}`
  }
 }
 export function addSnowSeasonLayer(map){return new SnowSeasonLayer(map)}

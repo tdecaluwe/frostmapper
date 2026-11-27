@@ -16,9 +16,14 @@ const server=http.createServer((req,res)=>{const rel=new URL(req.url,'http://loc
  await page.evaluate(async()=>{
   // An old cache is deliberately ignored. No cache migration is performed.
   const db=await new Promise(resolve=>{const r=indexedDB.open('frostmapper-snow-seasons',2);r.onupgradeneeded=()=>{r.result.createObjectStore('chunks',{keyPath:'id'});r.result.createObjectStore('summaries',{keyPath:'id'})};r.onsuccess=()=>resolve(r.result)});
-  const {emptyChunk,NO_SEASON,compressChunk}=await import('/src/map/snow-season/chunk-codec.js'),chunk=emptyChunk(0,0);
-  for(let i=0;i<5000;i++){chunk.words[i]=NO_SEASON;chunk.known[i>>>3]|=1<<(i&7)}const payload=await compressChunk(chunk);
-  await new Promise(resolve=>{const tx=db.transaction(['chunks','summaries'],'readwrite');tx.objectStore('chunks').put({id:'v2/archive-111/2006/2025/0mm/0/0',used:Date.now(),updated:Date.now(),payload});tx.objectStore('summaries').put({id:'v1/2006/2025/0mm/-25/7949',used:Date.now(),value:{start:'11-01',end:'05-31',days:212.25,marker:'old-cache'}});tx.oncomplete=resolve});db.close();
+  const {emptyChunk,setChunkCell,compressChunk}=await import('/src/map/snow-season/annual-chunk-codec.js');
+  const {estimateAnnualSeasons}=await import('/src/map/snow-season/annual-seasons.js');
+  const {SnowSeasonEstimator}=await import('/src/map/snow-season/season-estimator.js');
+  const cohort=new SnowSeasonEstimator().cohort,chunk=emptyChunk(0,0,{firstEndYear:cohort.firstEndYear,years:cohort.years});
+  const days=(Date.parse(cohort.endDate)-Date.parse(cohort.startDate))/86400000+1;
+  const annual=estimateAnnualSeasons({startDate:cohort.startDate,bands:new Uint8Array(days)},cohort);
+  for(let i=0;i<5000;i++)setChunkCell(chunk,i,annual);const payload=await compressChunk(chunk);
+  await new Promise(resolve=>{const tx=db.transaction(['chunks','summaries'],'readwrite');tx.objectStore('chunks').put({id:`v3/annual-depths/${cohort.firstEndYear}/${cohort.lastEndYear}/0/0`,used:Date.now(),updated:Date.now(),payload});tx.objectStore('summaries').put({id:'v1/2006/2025/0mm/-25/7949',used:Date.now(),value:{start:'11-01',end:'05-31',days:212.25,marker:'old-cache'}});tx.oncomplete=resolve});db.close();
  });
  await page.goto('http://127.0.0.1:8769/tests/snow-chunks.html');await page.waitForFunction(()=>window.snow?.worker);await page.waitForFunction(()=>document.querySelector('#snow-season-status')?.textContent.includes('cells'));
  assert.equal(await page.locator('#snow-season-toggle').isChecked(),false);assert.equal(await page.locator('#snow-season-status').isVisible(),true);assert.equal(await page.locator('#snow-season-metric').isVisible(),false);
@@ -30,14 +35,30 @@ const server=http.createServer((req,res)=>{const rel=new URL(req.url,'http://loc
  await page.locator('#snow-season-toggle').uncheck();const hiddenCalls=calls.length,hiddenStatus=await page.locator('#snow-season-status').textContent();await page.waitForTimeout(600);assert.ok(calls.length>hiddenCalls||await page.locator('#snow-season-status').textContent()!==hiddenStatus);await page.locator('#snow-season-toggle').check();
  await page.waitForFunction(async()=>Boolean((await window.snow.request('inspect',{key:'575/7349'}))?.days));
  const inspected=await page.evaluate(()=>window.snow.request('inspect',{key:'575/7349'}));assert.equal(inspected.days,365.25);assert.equal(inspected.start,'09-01');
+ // Changing depth uses the same downloaded histories and yearly cache.
+ await page.evaluate(()=>{window.sampleSnowPixel=()=>{const c=document.querySelector('#map canvas');return c?Array.from(c.getContext('2d').getImageData(c.width/2,c.height/2,1,1).data):null}});
+ await page.waitForFunction(()=>window.sampleSnowPixel()?.[3]>0);
+ const beforeDepth=await page.evaluate(()=>window.sampleSnowPixel());
+ await page.locator('#snow-season-depth').evaluate(el=>{el.value='20';el.dispatchEvent(new Event('input',{bubbles:true}))});
+ assert.equal(await page.locator('.snow-season-depth-label output').textContent(),'≥ 20 cm');
+ const high=await page.evaluate(()=>window.snow.request('inspect',{key:'575/7349',minimumDepth:20}));assert.equal(high.days,0);
+ await page.waitForFunction(()=>{const p=window.sampleSnowPixel();return p?.[0]>240&&p[1]>240&&p[2]>180&&p[3]>0});
+ assert.equal(await page.evaluate(()=>window.snow.source.minimumDepth),20);
+ const afterDepth=await page.evaluate(()=>window.sampleSnowPixel());
+ assert.notDeepEqual(afterDepth,beforeDepth);
+
  await page.evaluate(()=>window.snow.request('flush',{}));const persisted=await page.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('frostmapper-snow-seasons');r.onsuccess=()=>resolve(r.result)});return new Promise(resolve=>{const r=db.transaction('chunks').objectStore('chunks').getAll();r.onsuccess=()=>{resolve(r.result.map(v=>({id:v.id,format:v.payload.format,bytes:v.payload.data.byteLength})));db.close()}})});assert.ok(persisted.length>=2);assert.ok(persisted.every(v=>v.format==='deflate'));const testedConcurrency=maxActive;assert.ok(testedConcurrency<=8);
  // The seeded top 37 rows are complete fetch blocks and must be skipped. A
  // partially cached fetch block may be downloaded again to fill its remaining cells.
  assert.ok(calls.filter(q=>q.bx<3&&q.by<3).every(q=>q.by>0));assert.ok(calls.every(q=>q.days<=123&&q.width<=37&&q.height<=37));assert.equal(pointCalls,0);
  await page.reload();await page.waitForFunction(()=>window.snow?.worker);await page.waitForFunction(()=>Number(document.querySelector('#snow-season-status')?.textContent.match(/Snow data: ([\d,]+)/)?.[1]?.replaceAll(',',''))>=5000);
+ assert.equal(await page.locator('#snow-season-depth').inputValue(),'20');
  const reused=await page.evaluate(()=>window.snow.request('inspect',{key:'575/7349'}));assert.equal(reused.days,365.25);
  await page.locator('#snow-season-toggle').check();await page.evaluate(()=>window.map.getView().setResolution(2000));await page.waitForTimeout(700);assert.ok(await page.evaluate(()=>[...window.snow.source.nativeTiles.values()].some(t=>t.tileCoord[0]<4&&t.getState()===2)));
- await page.evaluate(async()=>{const [{default:View},{transform}]=await Promise.all([import('/modules/ol/View.js'),import('/modules/ol/proj.js')]);window.map.setView(new View({projection:'EPSG:3857',center:transform([575500,7349500],'EPSG:32633','EPSG:3857'),resolution:50}))});await page.waitForFunction(()=>window.snow.layer.getData([195,422])?.[3]>0);
+ await page.evaluate(async()=>{const [{default:View},{transform}]=await Promise.all([import('/modules/ol/View.js'),import('/modules/ol/proj.js')]);window.map.setView(new View({projection:'EPSG:3857',center:transform([575500,7349500],'EPSG:32633','EPSG:3857'),resolution:50}))});await page.waitForFunction(()=>window.snow.layer.getData([195,422])?.[3]>0,null,{timeout:15000}).catch(async error=>{
+  console.log('DISPLAY DEBUG',await page.evaluate(()=>({center:window.map.getView().getCenter(),size:window.map.getSize(),resolution:window.map.getView().getResolution(),pixel:window.snow.layer.getData([195,422]),sourceProjection:window.snow.source.getProjection().getCode(),tiles:[...window.snow.source.nativeTiles.values()].map(t=>({coord:t.tileCoord,state:t.getState(),pixel:t.getImage()?Array.from(t.getImage().getContext('2d').getImageData(95,95,1,1).data):null})),pending:window.snow.requests.size,status:window.snow.status.textContent})));
+  throw error;
+ });
  if(ARTIFACTS){fs.mkdirSync(ARTIFACTS,{recursive:true});await page.screenshot({path:path.join(ARTIFACTS,'chunk-layer-iphone.png')})}
  assert.deepEqual(errors,[]);const result={hiddenBackgroundFetch:true,priorityAfterMove:firstNew,persisted,native,inspection:inspected,cacheReused:true,fourMonthAreaRequests:true,pointCalls,maxActive:testedConcurrency,errors};if(ARTIFACTS)fs.writeFileSync(path.join(ARTIFACTS,'chunk-browser-check.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
  }finally{await browser.close();await new Promise(r=>server.close(r))}})().catch(e=>{console.error(e);server.close();process.exitCode=1});
