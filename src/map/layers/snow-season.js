@@ -63,7 +63,7 @@ export class SnowSeasonLayer{
  }
  ensureWorker(){
   if(this.worker)return true
-  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-queue-v4',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
+  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-fetch-8',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
   this.worker.onmessage=({data})=>{
    if(data.id&&this.requests.has(data.id)){
     const pending=this.requests.get(data.id);this.requests.delete(data.id)

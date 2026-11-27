@@ -5,6 +5,7 @@ import {compactSnowEstimate} from './grid.js'
 import {chunksForExtent} from './chunk-grid.js'
 import {SnowCollectionQueue} from './collection-queue.js'
 import {renderSnowTile} from './tile-renderer.js'
+const FETCH_CONCURRENCY=8
 const estimator=new SnowSeasonEstimator(),cohort=estimator.cohort,source=new NveBrowserSnowDepthSource()
 const queue=new SnowCollectionQueue(),loading=new Map(),changedChunks=new Set();let visibleChunks=new Set()
 let generation=0,running=0,pauseUntil=0,changeTimer=null,progressTimer=null,retryTimer=null,drained=0
@@ -27,7 +28,7 @@ async function load(cell){
 }
 function pump(){
  if(Date.now()<pauseUntil||[...loading.keys()].some(key=>visibleChunks.has(key)))return
- while(running<4){
+ while(running<FETCH_CONCURRENCY){
   const cell=next();if(!cell){if(!running)store.flush();break}
   running++
   load(cell).then(()=>queue.complete(cell)).catch(error=>{

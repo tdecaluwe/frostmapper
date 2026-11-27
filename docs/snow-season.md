@@ -81,7 +81,7 @@ advertised theme start date.
 - `store.js`: IndexedDB v2 `chunks` store, partial-block persistence, bounded
   decoded memory, 30-day expiry and read-through migration of legacy summaries.
 - `collection-queue.js`: pending-cell bitsets and weighted random viewport sampling.
-- `season-worker.js`: four concurrent cell jobs, active-view priority, retained
+- `season-worker.js`: eight concurrent cell jobs, active-view priority, retained
   background work, estimation, caching and display tile requests.
 - `tile-renderer.js`: worker-side aggregation of cached native cells into display
   pixels. This never fetches histories.
@@ -158,7 +158,7 @@ before dispatch, preventing duplicate in-flight requests. Legacy summaries are
 also migrated in bulk before a chunk enters the queue.
 
 Panning reprioritizes pending work without cancelling
-up to four in-flight histories or discarding completed cells. Broad views queue
+up to eight in-flight histories or discarding completed cells. Broad views queue
 chunks lazily rather than allocating a job object for every native cell.
 Failures pause collection for 30 seconds and retain the queue for retry.
 
@@ -218,7 +218,7 @@ and local OpenLayers/proj4 modules; it does not add application dependencies.
 Set `PLAYWRIGHT_MODULE`, `OL_NODE_MODULES`, and optionally `CHROMIUM_PATH` when
 those tools are outside normal Node resolution. `SNOW_TEST_ARTIFACTS` enables
 screenshots and JSON results. The runner serves fixtures locally and mocks NVE
-histories. It checks hidden-layer collection, four-request concurrency, new-area
+histories. It checks hidden-layer collection, eight-request concurrency, new-area
 priority, immediate credit for 5,000 pre-cached cells without refetching, legacy migration, compressed partial-block persistence, reload reuse,
 coarse display tiles and actual Web Mercator reprojection on an iPhone-sized
 viewport. No historical dataset is included or fetched by this test.
