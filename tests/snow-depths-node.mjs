@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {snowDepthBand} from '../src/map/snow-season/depths.js'
 import {PackedSnowDepthHistory,SnowArchiveSource} from '../src/map/snow-season/archive-source.js'
 import {yearCodec,seasonDays,seasonStart,estimateAnnualSeasons,summarizeAnnualSeasons} from '../src/map/snow-season/annual-seasons.js'
-import {emptyChunk,setChunkCell,chunkRecord,encodeChunk,decodeChunk,compressChunk,decompressChunk,CHUNK_CELLS,annualCell} from '../src/map/snow-season/annual-chunk-codec.js'
+import {emptyChunk,setChunkCell,chunkRecord,chunkValue,encodeChunk,decodeChunk,compressChunk,decompressChunk,CHUNK_CELLS,annualCell} from '../src/map/snow-season/annual-chunk-codec.js'
 import {SnowSeasonEstimator} from '../src/map/snow-season/season-estimator.js'
 import {renderSnowTile} from '../src/map/snow-season/tile-renderer.js'
 import {archiveQuery,archiveFixture} from './helpers/snow-archive-fixture.mjs'
@@ -85,7 +85,7 @@ test('annual chunks preserve quality, pending cells, eight-byte words and depth-
 })
 test('selected depth changes rendered pixels from cached annual data',async()=>{
  const c=emptyChunk(0,0,{firstEndYear:2024,years:1});setChunkCell(c,0,estimateAnnualSeasons(pattern(cohort),cohort))
- const store={record:chunkRecord,async getChunk(cx,cy){return cx===0&&cy===0?c:emptyChunk(cx,cy,{firstEndYear:2024,years:1})}}
+ const store={value:chunkValue,async getChunk(cx,cy){return cx===0&&cy===0?c:emptyChunk(cx,cy,{firstEndYear:2024,years:1})}}
  const low=await renderSnowTile(store,{z:4,x:0,y:0,metric:'length',minimumDepth:0}),high=await renderSnowTile(store,{z:4,x:0,y:0,metric:'length',minimumDepth:20})
  assert.equal(low[3],255);assert.equal(high[3],255);assert.notDeepEqual(low.slice(0,3),high.slice(0,3))
  await assert.rejects(()=>renderSnowTile(store,{z:4,x:0,y:0,metric:'length',minimumDepth:7}))

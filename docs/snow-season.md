@@ -111,7 +111,10 @@ advertised theme start date.
   fetch-block reservations that exclude cells already known or in flight.
 - `season-worker.js`: background scheduling, estimation, caching, display and
   inspection requests.
-- `tile-renderer.js`: worker-side aggregation of cached cells into display pixels.
+- `tile-renderer.js`: cooperative worker-side aggregation of cached scalar
+  summaries into display pixels.
+- `render-queue.js`: shared rendering, viewport/scale priority, preemption of
+  preload work and cancellation of obsolete depth/metric selections.
 - `raster-source.js`: canvas-backed OpenLayers source, updated on chunk changes.
 - `layers/snow-season.js`: controls, viewport priority and asynchronous inspection.
 
@@ -199,7 +202,27 @@ work. A fresh format version starts a fresh tally, as requested.
 Aggregation, archive decoding, compression and seasonal statistics run in the
 worker. OpenLayers receives RGBA tiles and handles map reprojection. Changing
 minimum depth, metric or projection reuses the same annual words. The slider
-invalidates display tiles without scheduling a new history download. The snow-data progress line and
+invalidates display tiles without scheduling a new history download.
+
+Collection slices yield after about 6 ms; rendering yields in roughly 4 ms
+slices. Inspection messages bypass the rendering queue. Repeated requests for
+the same tile share work, each receiving its own transferable pixel buffer.
+Visible tiles at the current display scale take priority over preload tiles.
+A changed depth/metric cancels obsolete queued and running renders.
+
+New cells mark affected native tiles dirty, without clearing their images or
+invalidating in-flight initial loads. Refreshes are coalesced and published only
+after replacement pixels are available; OpenLayers retains the previous
+reprojection while the next revision renders. Hidden and off-viewport refreshes
+wait until needed. Background collection continues independently. Fully bounded
+and incomplete scalar summaries are both cached, preserving their quality fields.
+
+The progress indicator counts only actual annual calculation as processing,
+excluding network waits and disk flushes. Cached inspections normally update
+without a loading message; the message appears only after 150 ms. Moving the map,
+changing depth or hiding the layer cancels the old readout, so a late result
+cannot reopen it for the wrong view.
+ The snow-data progress line and
 retry control remain visible in the menu when display settings are collapsed.
 
 ## Reproduce
@@ -208,7 +231,7 @@ No new runtime dependencies or build tools are required. Use a recent Node.js
 with built-in fetch:
 
 ```sh
-node --test tests/snow-season-node.mjs tests/snow-chunks-node.mjs tests/snow-archive-node.mjs tests/snow-depths-node.mjs
+node --test tests/snow-season-node.mjs tests/snow-chunks-node.mjs tests/snow-archive-node.mjs tests/snow-depths-node.mjs tests/snow-render-node.mjs
 node tools/snow-season/sample.mjs 120450 6908350 trek-season.json
 ```
 
@@ -244,3 +267,10 @@ A real-browser check from the GitHub Pages origin fetched all 60 archive windows
 for the Tafjordsfjella point (120500, 6908500). Its period (30 October–10 July,
 254.25 mean days) and 18/20 whole-period coverage matched the point-feed estimator.
 The archive needed no SWE recovery there; the point feed used three SWE dates.
+
+`tests/snow-refresh-browser.cjs` additionally checks an update arriving during
+initial loading, coalesced refreshes, hidden refresh suspension, and continuous
+nontransparent pixels through an actual Web Mercator reprojection refresh. The
+chunk integration check measures cached inspection while a large overview render
+is pending, and rejects obsolete readouts after a view change. These checks use
+synthetic data rather than downloading seNorge archives.

@@ -1,5 +1,5 @@
-import {NestedIntervalCodec} from './interval-codec.js?v=snow-depth-v3'
-import {depthIndex} from './depths.js?v=snow-depth-v3'
+import {NestedIntervalCodec} from './interval-codec.js?v=snow-refresh-v4'
+import {depthIndex} from './depths.js?v=snow-refresh-v4'
 const DAY=86400000,REFERENCE=Date.UTC(2001,8,1)
 export const seasonStart=year=>Date.UTC(year-1,8,1)
 export const seasonDays=year=>(Date.UTC(year,8,1)-seasonStart(year))/DAY

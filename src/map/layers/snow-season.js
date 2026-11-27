@@ -3,10 +3,10 @@ import proj4 from 'proj4'
 import {register} from 'ol/proj/proj4.js'
 import {get as getProjection,transform,transformExtent} from 'ol/proj.js'
 import {createMapView} from '../projections/view.js?v=viewport-model'
-import {SnowSeasonRasterSource} from '../snow-season/raster-source.js?v=snow-depth-v3'
-import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js?v=snow-depth-v3'
-import {SnowSeasonEstimator} from '../snow-season/season-estimator.js?v=snow-depth-v3'
-import {SNOW_DEPTHS_CM} from '../snow-season/depths.js?v=snow-depth-v3'
+import {SnowSeasonRasterSource} from '../snow-season/raster-source.js?v=snow-refresh-v4'
+import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js?v=snow-refresh-v4'
+import {SnowSeasonEstimator} from '../snow-season/season-estimator.js?v=snow-refresh-v4'
+import {SNOW_DEPTHS_CM} from '../snow-season/depths.js?v=snow-refresh-v4'
 
 export class SnowSeasonLayer{
  constructor(map){
@@ -15,6 +15,7 @@ export class SnowSeasonLayer{
   try{const saved=Number(localStorage.getItem('frostmapper.snowMinimumDepthCm'));if(SNOW_DEPTHS_CM.includes(saved))this.minimumDepth=saved}catch{}
   proj4.defs('EPSG:32633','+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs');register(proj4);getProjection('EPSG:32633').setExtent(SNOW_EXTENT)
   this.source=new SnowSeasonRasterSource(tile=>this.request('render',tile));this.layer=new TileLayer({properties:{storageLabel:'Snow season · 95%',storageId:'snow-season',storageStores:[{database:'frostmapper-snow-seasons',store:'chunks'},{database:'frostmapper-snow-seasons',store:'summaries'}]},source:this.source,visible:false,opacity:.6,zIndex:9,preload:1});this.layer.set('name','snow-season');map.addLayer(this.layer)
+  this.source.setActive(false)
   this.createControls();map.on('moveend',()=>this.updateView());map.on('change:view',()=>this.updateView());map.on('singleclick',event=>this.inspect(event.coordinate))
   const selected=new URL(location.href).searchParams.get('snow')
   if(['1','length','start','end'].includes(selected)){this.toggle.checked=true;if(selected!=='1'){this.metric=selected;this.selector.value=selected}this.enable()}
@@ -44,7 +45,7 @@ export class SnowSeasonLayer{
   root.append(status,retry,panel);document.querySelector('#layers').append(root)
   Object.assign(this,{toggle,panel,selector,gradient,legend,status,readout,retry,depth,depthOutput})
   depth.addEventListener('input',()=>{
-   this.minimumDepth=Number(depth.value);this.inspectionId++;this.readout.hidden=true
+   this.minimumDepth=Number(depth.value);this.cancelInspection();this.readout.hidden=true
    try{localStorage.setItem('frostmapper.snowMinimumDepthCm',String(this.minimumDepth))}catch{}
    this.updateDepthLabel();this.redraw()
   })
@@ -58,9 +59,9 @@ export class SnowSeasonLayer{
   this.legend.replaceChildren(...labels.map(text=>{const span=document.createElement('span');span.textContent=text;return span}))
  }
  enable(){
-  this.panel.hidden=!this.toggle.checked;this.layer.setVisible(this.toggle.checked)
+  this.panel.hidden=!this.toggle.checked;this.layer.setVisible(this.toggle.checked);this.source.setActive(this.toggle.checked)
   const url=new URL(location.href);if(this.toggle.checked)url.searchParams.set('snow',this.metric);else url.searchParams.delete('snow');history.replaceState(null,'',url)
-  this.redraw();if(this.toggle.checked)this.updateView();else this.readout.hidden=true
+  this.redraw();if(this.toggle.checked)this.updateView();else{this.cancelInspection();this.readout.hidden=true}
  }
  showData(){
   let native
@@ -78,7 +79,7 @@ export class SnowSeasonLayer{
  }
  ensureWorker(){
   if(this.worker)return true
-  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-depth-v3',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
+  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-refresh-v4',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
   this.worker.onmessage=({data})=>{
    if(data.id&&this.requests.has(data.id)){
     const pending=this.requests.get(data.id);this.requests.delete(data.id)
@@ -105,19 +106,23 @@ export class SnowSeasonLayer{
   return new Promise((resolve,reject)=>{this.requests.set(id,{resolve,reject});this.worker.postMessage({...payload,type,id})})
  }
  updateView(retry=false){
-  if(retry)this.retry.hidden=true;this.readout.hidden=true;const view=this.map.getView();let extent=null
+  if(retry)this.retry.hidden=true;this.cancelInspection();this.readout.hidden=true;const view=this.map.getView();let extent=null
   try{extent=transformExtent(view.calculateExtent(this.map.getSize()),view.getProjection(),'EPSG:32633',16);if(!extent.every(Number.isFinite))extent=null}catch{}
-  this.grid={extent};if(!this.ensureWorker())return
+  const size=this.map.getSize(),nativeResolution=extent&&size?.[0]&&size?.[1]?Math.max((extent[2]-extent[0])/size[0],(extent[3]-extent[1])/size[1]):null
+  this.grid={extent};this.source.setViewport(extent,nativeResolution);if(!this.ensureWorker())return
   // Collection is independent of layer visibility. The worker retains previous jobs.
-  this.worker.postMessage({type:'view',generation:++this.generation,extent,retry})
+  this.worker.postMessage({type:'view',generation:++this.generation,extent,nativeResolution,retry})
  }
  redraw(){this.source.setDepth(this.minimumDepth);this.source.setMetric(this.metric)}
+ cancelInspection(){this.inspectionId++;clearTimeout(this.inspectionTimer);this.inspectionTimer=null}
  async inspect(coordinate){
   if(!this.toggle.checked)return
   let native;try{native=transform(coordinate,this.map.getView().getProjection(),'EPSG:32633')}catch{return}
-  const inspection=++this.inspectionId;this.readout.hidden=false;this.readout.textContent='Reading snow-season data…'
-  let record;try{record=await this.request('inspect',{key:cellKey(...native),minimumDepth:this.minimumDepth})}catch{if(inspection===this.inspectionId)this.readout.textContent='Snow data unavailable';return}
+  this.cancelInspection();const inspection=this.inspectionId
+  const timer=this.inspectionTimer=setTimeout(()=>{if(inspection===this.inspectionId){this.readout.hidden=false;this.readout.textContent='Reading snow-season data…'}},150)
+  let record;try{record=await this.request('inspect',{key:cellKey(...native),minimumDepth:this.minimumDepth})}catch{if(inspection===this.inspectionId){this.readout.hidden=false;this.readout.textContent='Snow data unavailable'}return}finally{clearTimeout(timer)}
   if(inspection!==this.inspectionId||!this.toggle.checked)return
+  this.readout.hidden=false
   if(!record){this.readout.textContent='Cell not calculated yet';return}
   if(record.status==='outside-model'){this.readout.textContent='Outside seNorge model coverage';return}
   if(record.days===null){this.readout.textContent='Historical data incomplete in this cell';return}

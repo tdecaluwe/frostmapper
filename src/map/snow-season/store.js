@@ -1,5 +1,5 @@
-import {emptyChunk,setChunkCell,chunkRecord,compressChunk,decompressChunk} from './annual-chunk-codec.js?v=snow-depth-v3'
-import {chunkCell,chunkKey} from './chunk-grid.js?v=snow-depth-v3'
+import {emptyChunk,setChunkCell,chunkRecord,chunkValue,compressChunk,decompressChunk} from './annual-chunk-codec.js?v=snow-refresh-v4'
+import {chunkCell,chunkKey} from './chunk-grid.js?v=snow-refresh-v4'
 const EXPIRY=30*86400000
 /** Encoded 111x111 blocks only; raw historical time series never reach IndexedDB. */
 export class SnowSeasonStore{
@@ -34,6 +34,7 @@ export class SnowSeasonStore{
   })().finally(()=>this.loading.delete(key));this.loading.set(key,pending);return pending
  }
  record(chunk,index,minimumDepth=0){return chunkRecord(chunk,index,minimumDepth)}
+ value(chunk,index,metric,minimumDepth=0){return chunkValue(chunk,index,metric,minimumDepth)}
  async get(key,minimumDepth=0){
   const address=chunkCell(key),chunk=await this.getChunk(address.cx,address.cy)
   return this.record(chunk,address.index,minimumDepth)

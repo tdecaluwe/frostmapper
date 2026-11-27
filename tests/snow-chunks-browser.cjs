@@ -35,6 +35,27 @@ const server=http.createServer((req,res)=>{const rel=new URL(req.url,'http://loc
  await page.locator('#snow-season-toggle').uncheck();const hiddenCalls=calls.length,hiddenStatus=await page.locator('#snow-season-status').textContent();await page.waitForTimeout(600);assert.ok(calls.length>hiddenCalls||await page.locator('#snow-season-status').textContent()!==hiddenStatus);await page.locator('#snow-season-toggle').check();
  await page.waitForFunction(async()=>Boolean((await window.snow.request('inspect',{key:'575/7349'}))?.days));
  const inspected=await page.evaluate(()=>window.snow.request('inspect',{key:'575/7349'}));assert.equal(inspected.days,365.25);assert.equal(inspected.start,'09-01');
+ // Inspection bypasses a large pending coarse render and should not flash a
+ // loading message for an already-cached cell.
+ const responsiveness=await page.evaluate(async()=>{
+  let coarseDone=false;const messages=[];const observer=new MutationObserver(()=>messages.push(window.snow.readout.textContent));observer.observe(window.snow.readout,{childList:true,subtree:true});
+  const coarse=window.snow.request('render',{z:0,x:0,y:0,metric:'length',minimumDepth:0,selection:window.snow.source.epoch}).then(()=>{coarseDone=true});
+  await new Promise(r=>setTimeout(r,0));
+  const started=performance.now();await window.snow.inspect([575500,7349500]);
+  const result={inspectionMs:performance.now()-started,coarsePending:!coarseDone,text:window.snow.readout.textContent};
+  observer.disconnect();result.readingFlashes=messages.some(text=>text.includes('Reading snow-season'));await coarse;return result;
+ });
+ assert.equal(responsiveness.coarsePending,true);assert.ok(responsiveness.inspectionMs<500,JSON.stringify(responsiveness));assert.ok(!responsiveness.text.includes('Reading snow-season'));
+ if(responsiveness.inspectionMs<150)assert.equal(responsiveness.readingFlashes,false);
+ const obsoleteReadIgnored=await page.evaluate(async()=>{
+  const original=window.snow.request;let finish;
+  window.snow.request=function(type,payload){return type==='inspect'?new Promise(r=>{finish=r}):original.call(this,type,payload)};
+  try{
+   const pending=window.snow.inspect([575500,7349500]);window.snow.updateView();finish({days:12,start:'11-01',end:'11-12'});await pending;
+   return window.snow.readout.hidden;
+  }finally{window.snow.request=original}
+ });assert.equal(obsoleteReadIgnored,true);
+
  // Changing depth uses the same downloaded histories and yearly cache.
  await page.evaluate(()=>{window.sampleSnowPixel=()=>{const c=document.querySelector('#map canvas');return c?Array.from(c.getContext('2d').getImageData(c.width/2,c.height/2,1,1).data):null}});
  await page.waitForFunction(()=>window.sampleSnowPixel()?.[3]>0);
@@ -54,11 +75,11 @@ const server=http.createServer((req,res)=>{const rel=new URL(req.url,'http://loc
  await page.reload();await page.waitForFunction(()=>window.snow?.worker);await page.waitForFunction(()=>Number(document.querySelector('#snow-season-status')?.textContent.match(/Snow data: ([\d,]+)/)?.[1]?.replaceAll(',',''))>=5000);
  assert.equal(await page.locator('#snow-season-depth').inputValue(),'20');
  const reused=await page.evaluate(()=>window.snow.request('inspect',{key:'575/7349'}));assert.equal(reused.days,365.25);
- await page.locator('#snow-season-toggle').check();await page.evaluate(()=>window.map.getView().setResolution(2000));await page.waitForTimeout(700);assert.ok(await page.evaluate(()=>[...window.snow.source.nativeTiles.values()].some(t=>t.tileCoord[0]<4&&t.getState()===2)));
+ await page.locator('#snow-season-toggle').check();await page.evaluate(()=>window.map.getView().setResolution(2000));await page.waitForFunction(()=>[...window.snow.source.nativeTiles.values()].some(t=>t.tileCoord[0]<4&&t.getState()===2));
  await page.evaluate(async()=>{const [{default:View},{transform}]=await Promise.all([import('/modules/ol/View.js'),import('/modules/ol/proj.js')]);window.map.setView(new View({projection:'EPSG:3857',center:transform([575500,7349500],'EPSG:32633','EPSG:3857'),resolution:50}))});await page.waitForFunction(()=>window.snow.layer.getData([195,422])?.[3]>0,null,{timeout:15000}).catch(async error=>{
   console.log('DISPLAY DEBUG',await page.evaluate(()=>({center:window.map.getView().getCenter(),size:window.map.getSize(),resolution:window.map.getView().getResolution(),pixel:window.snow.layer.getData([195,422]),sourceProjection:window.snow.source.getProjection().getCode(),tiles:[...window.snow.source.nativeTiles.values()].map(t=>({coord:t.tileCoord,state:t.getState(),pixel:t.getImage()?Array.from(t.getImage().getContext('2d').getImageData(95,95,1,1).data):null})),pending:window.snow.requests.size,status:window.snow.status.textContent})));
   throw error;
  });
  if(ARTIFACTS){fs.mkdirSync(ARTIFACTS,{recursive:true});await page.screenshot({path:path.join(ARTIFACTS,'chunk-layer-iphone.png')})}
- assert.deepEqual(errors,[]);const result={hiddenBackgroundFetch:true,priorityAfterMove:firstNew,persisted,native,inspection:inspected,cacheReused:true,fourMonthAreaRequests:true,pointCalls,maxActive:testedConcurrency,errors};if(ARTIFACTS)fs.writeFileSync(path.join(ARTIFACTS,'chunk-browser-check.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
+ assert.deepEqual(errors,[]);const result={hiddenBackgroundFetch:true,priorityAfterMove:firstNew,persisted,native,inspection:inspected,cacheReused:true,responsiveness,obsoleteReadIgnored,fourMonthAreaRequests:true,pointCalls,maxActive:testedConcurrency,errors};if(ARTIFACTS)fs.writeFileSync(path.join(ARTIFACTS,'chunk-browser-check.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
  }finally{await browser.close();await new Promise(r=>server.close(r))}})().catch(e=>{console.error(e);server.close();process.exitCode=1});

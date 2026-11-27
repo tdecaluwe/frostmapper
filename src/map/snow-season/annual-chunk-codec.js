@@ -1,6 +1,6 @@
-import {CHUNK_SIZE,CHUNK_CELLS,hasCell} from './chunk-codec.js?v=snow-depth-v3'
-import {summarizeAnnualSeasons} from './annual-seasons.js?v=snow-depth-v3'
-import {depthIndex} from './depths.js?v=snow-depth-v3'
+import {CHUNK_SIZE,CHUNK_CELLS,hasCell} from './chunk-codec.js?v=snow-refresh-v4'
+import {summarizeAnnualSeasons} from './annual-seasons.js?v=snow-refresh-v4'
+import {depthIndex} from './depths.js?v=snow-refresh-v4'
 export {CHUNK_SIZE,CHUNK_CELLS,hasCell}
 export function emptyChunk(cx,cy,{firstEndYear=new Date().getUTCFullYear()-20,years=20}={}){
  return {cx,cy,firstEndYear,years,data:new Uint8Array(0),quality:new Uint8Array(0),known:new Uint8Array(Math.ceil(CHUNK_CELLS/8)),revision:0,summary:null}
@@ -20,28 +20,41 @@ export function annualCell(chunk,index){
  for(let y=0;y<chunk.years;y++){const row=y*CHUNK_CELLS+index;data.set(chunk.data.subarray(row*8,row*8+8),y*8);known[y]=chunk.quality[row]}
  return {data,known}
 }
-/** One selected-depth summary cache per chunk, in bounded typed arrays. */
-export function chunkRecord(chunk,index,minimumDepth=0){
+/** One selected-depth summary cache per chunk. Unknown results are cached too;
+ * drawing reads scalar arrays, while only inspections format calendar dates. */
+function summary(chunk,index,minimumDepth){
  depthIndex(minimumDepth)
  if(!hasCell(chunk,index))return null
- if(!chunk.summary||chunk.summary.depth!==minimumDepth)chunk.summary={depth:minimumDepth,state:new Uint8Array(CHUNK_CELLS),start:new Uint16Array(CHUNK_CELLS),end:new Uint16Array(CHUNK_CELLS),total:new Uint16Array(CHUNK_CELLS),whole:new Uint8Array(CHUNK_CELLS)}
+ if(!chunk.summary||chunk.summary.depth!==minimumDepth)chunk.summary={depth:minimumDepth,state:new Uint8Array(CHUNK_CELLS),start:new Uint16Array(CHUNK_CELLS),end:new Uint16Array(CHUNK_CELLS),total:new Uint16Array(CHUNK_CELLS),unknown:new Uint8Array(CHUNK_CELLS),minimum:new Uint16Array(CHUNK_CELLS),maximum:new Uint16Array(CHUNK_CELLS),wholeMin:new Uint8Array(CHUNK_CELLS),wholeMax:new Uint8Array(CHUNK_CELLS)}
  const cache=chunk.summary
- if(cache.state[index]){
-  if(cache.state[index]===2)return {status:'complete',days:0,start:null,end:null,minimumDepth,unknownYears:0,lengthBounds:{minimum:0,maximum:0},wholeYears:null}
-  const date=n=>new Date(Date.UTC(2001,8,1)+n*86400000).toISOString().slice(5,10)
-  const length=cache.end[index]-cache.start[index]+1
-  return {status:'complete',days:cache.total[index]/chunk.years,start:date(cache.start[index]),end:date(cache.end[index]),wholeYears:{minimum:cache.whole[index],maximum:cache.whole[index]},minimumDepth,unknownYears:0,lengthBounds:{minimum:length,maximum:length}}
- }
- const record=summarizeAnnualSeasons(annualCell(chunk,index),{firstEndYear:chunk.firstEndYear,years:chunk.years},minimumDepth)
- // Keep uncertainty records uncached rather than losing their bounds.
- if(!record.unknownYears){
-  cache.state[index]=record.days===0?2:1
+ if(!cache.state[index]){
+  const record=summarizeAnnualSeasons(annualCell(chunk,index),{firstEndYear:chunk.firstEndYear,years:chunk.years},minimumDepth)
+  cache.state[index]=record.days===null?3:record.days===0?2:1
+  cache.unknown[index]=record.unknownYears;cache.minimum[index]=record.lengthBounds.minimum;cache.maximum[index]=record.lengthBounds.maximum
   if(record.days){
    const day=md=>(Date.parse(`${md>='09-01'?2001:2002}-${md}T00:00:00Z`)-Date.UTC(2001,8,1))/86400000
-   cache.start[index]=day(record.start);cache.end[index]=day(record.end);cache.total[index]=Math.round(record.days*chunk.years);cache.whole[index]=record.wholeYears.minimum
+   cache.start[index]=day(record.start);cache.end[index]=day(record.end);cache.total[index]=Math.round(record.days*chunk.years)
+   cache.wholeMin[index]=record.wholeYears.minimum;cache.wholeMax[index]=record.wholeYears.maximum
   }
  }
- return record
+ return cache
+}
+export function chunkValue(chunk,index,metric,minimumDepth=0){
+ const cache=summary(chunk,index,minimumDepth)
+ if(!cache||cache.state[index]===3)return null
+ if(cache.state[index]===2)return metric==='length'?0:null
+ return metric==='length'?cache.total[index]/chunk.years:cache[metric][index]
+}
+export function chunkRecord(chunk,index,minimumDepth=0){
+ const cache=summary(chunk,index,minimumDepth)
+ if(!cache)return null
+ const state=cache.state[index],unknownYears=cache.unknown[index]
+ const date=n=>new Date(Date.UTC(2001,8,1)+n*86400000).toISOString().slice(5,10)
+ return {status:unknownYears?'bounded':'complete',minimumDepth,unknownYears,
+  lengthBounds:{minimum:cache.minimum[index],maximum:cache.maximum[index]},
+  days:state===3?null:state===2?0:cache.total[index]/chunk.years,
+  start:state===1?date(cache.start[index]):null,end:state===1?date(cache.end[index]):null,
+  wholeYears:state===1?{minimum:cache.wholeMin[index],maximum:cache.wholeMax[index]}:null}
 }
 export function encodeChunk(chunk){
  const n=CHUNK_CELLS*chunk.years,qLength=Math.ceil(n*3/8),knownLength=chunk.known.length

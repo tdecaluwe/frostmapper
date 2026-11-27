@@ -1,5 +1,5 @@
-import {snowFetchBlock} from './area-grid.js?v=snow-depth-v3'
-import {depthIndex,snowDepthBand} from './depths.js?v=snow-depth-v3'
+import {snowFetchBlock} from './area-grid.js?v=snow-refresh-v4'
+import {depthIndex,snowDepthBand} from './depths.js?v=snow-refresh-v4'
 const DAY=86400000,BASE='https://thredds.met.no/thredds/dodsC/senorge/seNorge_snow',VARIABLES={sd:'snow_depth',swe:'snow_water_equivalent'}
 const iso=day=>new Date(day*DAY).toISOString().slice(0,10)
 function dayNumber(value){const n=Date.parse(`${value}T00:00:00Z`)/DAY;if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isInteger(n)||iso(n)!==value)throw new RangeError('Invalid archive date');return n}
