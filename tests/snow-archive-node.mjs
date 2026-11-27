@@ -17,13 +17,13 @@ test('four-month requests cover exactly 20 complete snow years, including leap d
  for(let i=0;i<windows.length;i++){assert.ok(windows[i].days<=123);if(i)assert.equal(windows[i-1].last+1,windows[i].first)}
  assert.deepEqual(fourMonthWindows(cohort.startDate,cohort.endDate).map(w=>w.days),[122,121,123]);assert.throws(()=>fourMonthWindows('2025-09-31','2025-10-01'))
 })
-test('37-cell blocks align as thirds of 111-cell chunks and clip native model edges',()=>{
- assert.equal(CHUNK_SIZE,FETCH_BLOCK_SIZE*3);assert.equal(block.width,37);assert.equal(block.yLast,1549);assert.equal(block.yFirst,1513)
- const edge=snowFetchBlock(32,41);assert.equal(edge.width,11);assert.equal(edge.height,33);assert.deepEqual(edge.extent,[1109000,6450000,1120000,6483000]);assert.throws(()=>snowFetchBlock(33,0))
+test('111-cell requests align with storage chunks and clip native model edges',()=>{
+ assert.equal(CHUNK_SIZE,FETCH_BLOCK_SIZE);assert.equal(block.width,111);assert.equal(block.yLast,1549);assert.equal(block.yFirst,1439)
+ const edge=snowFetchBlock(10,13);assert.equal(edge.width,85);assert.equal(edge.height,107);assert.deepEqual(edge.extent,[1035000,6450000,1120000,6557000]);assert.throws(()=>snowFetchBlock(11,0))
 })
 test('binary parser checks dimensions, duplicated lengths and payload completeness',()=>{
- const w=fourMonthWindows(cohort.startDate,cohort.endDate)[0],url=archiveUrl('sd',w,block),b=archiveFixture(url),a=parseArchiveArray(b.buffer,{days:w.days,width:37,height:37});assert.equal(a.values,122*37*37);assert.equal(a.view.getFloat32(a.offset),1)
- assert.throws(()=>parseArchiveArray(b.slice(0,-1).buffer,{days:w.days,width:37,height:37}));assert.throws(()=>parseArchiveArray(b.buffer,{days:w.days,width:36,height:37}))
+ const w=fourMonthWindows(cohort.startDate,cohort.endDate)[0],url=archiveUrl('sd',w,block),b=archiveFixture(url),a=parseArchiveArray(b.buffer,{days:w.days,width:111,height:111});assert.equal(a.values,122*111*111);assert.equal(a.view.getFloat32(a.offset),1)
+ assert.throws(()=>parseArchiveArray(b.slice(0,-1).buffer,{days:w.days,width:111,height:111}));assert.throws(()=>parseArchiveArray(b.buffer,{days:w.days,width:36,height:37}))
 })
 test('packed history retains three states and repeated writes do not inflate unknown counts',()=>{
  const h=new PackedSnowHistory({cells:9,days:5,indices:[8,0]});assert.equal(h.data.byteLength,3);h.set(0,0,1);h.set(0,0,1);h.set(0,1,0);assert.equal(h.unknown[0],3);assert.deepEqual([...h.cover(8)],[1,0,255,255,255]);assert.deepEqual([...h.cover(0)],[255,255,255,255,255]);assert.throws(()=>h.cover(1))
@@ -49,7 +49,7 @@ test('request pool reprioritizes queued work, pauses, and enforces a shared limi
  const pool=new SnowArchiveRequestPool({concurrency:1}),order=[];let release;const first=pool.run(()=>new Promise(resolve=>{release=()=>{order.push('first');resolve()}}));await tick();const old=pool.run(()=>order.push('background'),{priority:()=>1}),current=pool.run(()=>order.push('visible'),{priority:()=>0});pool.paused=true;release();await first;await tick();assert.deepEqual(order,['first']);pool.paused=false;pool.pump();await Promise.all([old,current]);assert.deepEqual(order,['first','visible','background']);assert.throws(()=>new SnowArchiveRequestPool({concurrency:0}))
 })
 test('block reservations exclude cached cells and retries restore only unfinished cells',()=>{
- const c=emptyChunk(0,0);c.known[0]|=1;const q=new SnowCollectionQueue({random:()=>0});q.addChunk(c);const area=q.takeBlock();assert.equal(area.bx,0);assert.equal(area.by,0);assert.equal(area.cells.length,37*37-1);assert.ok(area.cells.every(cell=>cell.localIndex!==0));assert.equal(new Set(area.cells.map(c=>c.localIndex)).size,area.cells.length)
+ const c=emptyChunk(0,0);c.known[0]|=1;const q=new SnowCollectionQueue({random:()=>0});q.addChunk(c);const area=q.takeBlock();assert.equal(area.bx,0);assert.equal(area.by,0);assert.equal(area.cells.length,111*111-1);assert.ok(area.cells.every(cell=>cell.localIndex!==0));assert.equal(new Set(area.cells.map(c=>c.localIndex)).size,area.cells.length)
  const one=area.cells[0];q.complete(one);q.retryBlock(area);assert.equal(q.completed,2);assert.equal(q.reserved.size,0);assert.ok(hasCell(c,0))
 })
 test('an entirely missing history stays unknown and does not trigger SWE downloads',async()=>{

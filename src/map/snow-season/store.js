@@ -1,5 +1,5 @@
-import {emptyChunk,setChunkCell,chunkRecord,chunkValue,compressChunk,decompressChunk} from './annual-chunk-codec.js?v=snow-resume-v5'
-import {chunkCell,chunkKey} from './chunk-grid.js?v=snow-resume-v5'
+import {emptyChunk,setChunkCell,chunkRecord,chunkValue,compressChunk,decompressChunk} from './annual-chunk-codec.js?v=snow-serial-v6'
+import {chunkCell,chunkKey} from './chunk-grid.js?v=snow-serial-v6'
 const EXPIRY=30*86400000
 /** Encoded 111x111 blocks only; raw historical time series never reach IndexedDB. */
 export class SnowSeasonStore{
@@ -45,6 +45,20 @@ export class SnowSeasonStore{
    chunk??=emptyChunk(cx,cy,this)
    this.memory.set(key,chunk);this.trim(key);return chunk
   })().finally(()=>this.loading.delete(key));this.loading.set(key,pending);return pending
+ }
+ /** Recheck disk under the region lock: another tab may have advanced it. */
+ async reloadChunk(cx,cy){
+  const key=chunkKey(cx,cy)
+  if(this.dirty.has(key))await this.flush()
+  await this.loading.get(key)
+  // Without persistent storage, retain this worker's only checkpoint.
+  if(await this.open())this.memory.delete(key)
+  return this.getChunk(cx,cy)
+ }
+ async saveChunk(chunk,{notify=false}={}){
+  const key=chunkKey(chunk.cx,chunk.cy);this.memory.set(key,chunk);this.dirty.add(key)
+  if(notify)this.onChange({cx:chunk.cx,cy:chunk.cy,key})
+  await this.flush()
  }
  record(chunk,index,minimumDepth=0){return chunkRecord(chunk,index,minimumDepth)}
  value(chunk,index,metric,minimumDepth=0){return chunkValue(chunk,index,metric,minimumDepth)}

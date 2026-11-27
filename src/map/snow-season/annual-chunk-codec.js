@@ -1,9 +1,9 @@
-import {CHUNK_SIZE,CHUNK_CELLS,hasCell} from './chunk-codec.js?v=snow-resume-v5'
-import {summarizeAnnualSeasons} from './annual-seasons.js?v=snow-resume-v5'
-import {depthIndex} from './depths.js?v=snow-resume-v5'
+import {CHUNK_SIZE,CHUNK_CELLS,hasCell} from './chunk-codec.js?v=snow-serial-v6'
+import {summarizeAnnualSeasons} from './annual-seasons.js?v=snow-serial-v6'
+import {depthIndex} from './depths.js?v=snow-serial-v6'
 export {CHUNK_SIZE,CHUNK_CELLS,hasCell}
 export function emptyChunk(cx,cy,{firstEndYear=new Date().getUTCFullYear()-20,years=20}={}){
- return {cx,cy,firstEndYear,years,data:new Uint8Array(0),quality:new Uint8Array(0),known:new Uint8Array(Math.ceil(CHUNK_CELLS/8)),revision:0,summary:null}
+ return {cx,cy,firstEndYear,years,data:new Uint8Array(0),quality:new Uint8Array(0),known:new Uint8Array(Math.ceil(CHUNK_CELLS/8)),completedYears:0,revision:0,summary:null}
 }
 export function setChunkCell(chunk,index,annual){
  if(!Number.isInteger(index)||index<0||index>=CHUNK_CELLS||annual.data?.length!==chunk.years*8||annual.known?.length!==chunk.years)throw new RangeError('Invalid annual snow cell')
@@ -14,6 +14,17 @@ export function setChunkCell(chunk,index,annual){
  }
  chunk.known[index>>>3]|=1<<(index&7);chunk.revision++
  if(chunk.summary)chunk.summary.state[index]=0
+}
+/** Partial annual results stay invisible until all cohort years are saved. */
+export function setChunkYearCell(chunk,index,year,annual){
+ if(!Number.isInteger(index)||index<0||index>=CHUNK_CELLS||!Number.isInteger(year)||year<0||year>=chunk.years||annual.data?.length!==8||annual.known?.length!==1||annual.known[0]>5)throw new RangeError('Invalid partial annual cell')
+ if(hasCell(chunk,index))return
+ if(!chunk.data.length){chunk.data=new Uint8Array(CHUNK_CELLS*chunk.years*8);chunk.quality=new Uint8Array(CHUNK_CELLS*chunk.years)}
+ const row=year*CHUNK_CELLS+index;chunk.data.set(annual.data,row*8);chunk.quality[row]=annual.known[0];chunk.revision++
+}
+export function finishChunkCells(chunk,indices){
+ for(const index of indices){chunk.known[index>>>3]|=1<<(index&7);if(chunk.summary)chunk.summary.state[index]=0}
+ chunk.revision++
 }
 export function annualCell(chunk,index){
  const data=new Uint8Array(chunk.years*8),known=new Uint8Array(chunk.years)
@@ -61,6 +72,7 @@ export function encodeChunk(chunk){
  const dataLength=n*8,bytes=new Uint8Array(32+dataLength+qLength+knownLength),view=new DataView(bytes.buffer)
  bytes.set([83,83,67,51]);view.setUint16(4,CHUNK_SIZE,true);view.setUint16(6,CHUNK_SIZE,true);view.setInt16(8,chunk.cx,true);view.setInt16(10,chunk.cy,true)
  view.setUint16(12,chunk.firstEndYear,true);view.setUint8(14,chunk.years);view.setUint32(16,dataLength,true);view.setUint32(20,qLength,true);view.setUint32(24,knownLength,true)
+ view.setUint32(28,chunk.completedYears??0,true)
  bytes.set(chunk.data,32);const q=32+dataLength
  for(let i=0;i<n;i++){
   const value=chunk.quality[i]??0,bit=i*3,j=q+(bit>>>3),shift=bit&7
@@ -75,6 +87,7 @@ export function decodeChunk(input){
  const dataLength=n*8,qLength=Math.ceil(n*3/8),knownLength=Math.ceil(CHUNK_CELLS/8)
  if(v.getUint16(4,true)!==CHUNK_SIZE||v.getUint16(6,true)!==CHUNK_SIZE||years<1||years>100||firstEndYear<1901||firstEndYear+years>9999||v.getUint32(16,true)!==dataLength||v.getUint32(20,true)!==qLength||v.getUint32(24,true)!==knownLength||bytes.length!==32+dataLength+qLength+knownLength)throw new RangeError('Invalid annual chunk dimensions')
  const c=emptyChunk(v.getInt16(8,true),v.getInt16(10,true),{years,firstEndYear}),q=32+dataLength
+ c.completedYears=v.getUint32(28,true)
  c.data=bytes.subarray(32,q);c.quality=new Uint8Array(n);c.known.set(bytes.subarray(q+qLength))
  for(let i=0;i<n;i++){
   const bit=i*3,j=q+(bit>>>3),shift=bit&7,value=((bytes[j]|((bytes[j+1]??0)<<8))>>>shift)&7

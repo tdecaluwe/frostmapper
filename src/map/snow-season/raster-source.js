@@ -2,10 +2,10 @@ import TileImageSource from 'ol/source/TileImage.js'
 import Tile from 'ol/Tile.js'
 import TileState from 'ol/TileState.js'
 import TileGrid from 'ol/tilegrid/TileGrid.js'
-import {SNOW_EXTENT} from './grid.js?v=snow-resume-v5'
-import {depthIndex} from './depths.js?v=snow-resume-v5'
-import {CHUNK_SIZE} from './chunk-codec.js?v=snow-resume-v5'
-import {SNOW_RESOLUTIONS,displayTileExtent,CHUNK_METRES} from './chunk-grid.js?v=snow-resume-v5'
+import {SNOW_EXTENT} from './grid.js?v=snow-serial-v6'
+import {depthIndex} from './depths.js?v=snow-serial-v6'
+import {CHUNK_SIZE} from './chunk-codec.js?v=snow-serial-v6'
+import {SNOW_RESOLUTIONS,displayTileExtent,CHUNK_METRES} from './chunk-grid.js?v=snow-serial-v6'
 /** Canvas-backed native tiles; avoids encoding an image just to decode it again. */
 class SnowCanvasTile extends Tile{
  constructor(coord,state,src,crossOrigin,loader,options){super(coord,state,options);this.src=src;this.loader=loader;this.image=null}

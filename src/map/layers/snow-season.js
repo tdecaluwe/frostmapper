@@ -3,11 +3,11 @@ import proj4 from 'proj4'
 import {register} from 'ol/proj/proj4.js'
 import {get as getProjection,transform,transformExtent} from 'ol/proj.js'
 import {createMapView} from '../projections/view.js?v=viewport-model'
-import {SnowSeasonRasterSource} from '../snow-season/raster-source.js?v=snow-resume-v5'
-import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js?v=snow-resume-v5'
-import {SnowSeasonEstimator} from '../snow-season/season-estimator.js?v=snow-resume-v5'
-import {SNOW_DEPTHS_CM} from '../snow-season/depths.js?v=snow-resume-v5'
-import {SnowTabRecovery} from '../snow-season/tab-recovery.js?v=snow-resume-v5'
+import {SnowSeasonRasterSource} from '../snow-season/raster-source.js?v=snow-serial-v6'
+import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js?v=snow-serial-v6'
+import {SnowSeasonEstimator} from '../snow-season/season-estimator.js?v=snow-serial-v6'
+import {SNOW_DEPTHS_CM} from '../snow-season/depths.js?v=snow-serial-v6'
+import {SnowTabRecovery} from '../snow-season/tab-recovery.js?v=snow-serial-v6'
 
 export class SnowSeasonLayer{
  constructor(map){
@@ -15,7 +15,7 @@ export class SnowSeasonLayer{
   this.minimumDepth=0
   try{const saved=Number(localStorage.getItem('frostmapper.snowMinimumDepthCm'));if(SNOW_DEPTHS_CM.includes(saved))this.minimumDepth=saved}catch{}
   proj4.defs('EPSG:32633','+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs');register(proj4);getProjection('EPSG:32633').setExtent(SNOW_EXTENT)
-  this.source=new SnowSeasonRasterSource(tile=>this.request('render',tile));this.layer=new TileLayer({properties:{storageLabel:'Snow season · 95%',storageId:'snow-season',storageStores:[{database:'frostmapper-snow-seasons',store:'chunks'},{database:'frostmapper-snow-seasons',store:'summaries'}]},source:this.source,visible:false,opacity:.6,zIndex:9,preload:1});this.layer.set('name','snow-season');map.addLayer(this.layer)
+  this.source=new SnowSeasonRasterSource(tile=>this.request('render',tile));this.layer=new TileLayer({properties:{storageLabel:'Snow season · 95%',storageId:'snow-season',storageStores:[{database:'frostmapper-snow-network',store:'state'},{database:'frostmapper-snow-seasons',store:'chunks'},{database:'frostmapper-snow-seasons',store:'summaries'}]},source:this.source,visible:false,opacity:.6,zIndex:9,preload:1});this.layer.set('name','snow-season');map.addLayer(this.layer)
   this.source.setActive(false)
   this.createControls();map.on('moveend',()=>this.updateView());map.on('change:view',()=>this.updateView());map.on('singleclick',event=>this.inspect(event.coordinate))
   const selected=new URL(location.href).searchParams.get('snow')
@@ -81,7 +81,7 @@ export class SnowSeasonLayer{
  }
  ensureWorker(){
   if(this.worker)return true
-  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-resume-v5',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
+  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-serial-v6',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
   const worker=this.worker
   worker.onmessage=({data})=>{
    if(this.worker!==worker)return

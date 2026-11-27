@@ -1,5 +1,6 @@
-import {snowFetchBlock} from './area-grid.js?v=snow-resume-v5'
-import {depthIndex,snowDepthBand} from './depths.js?v=snow-resume-v5'
+import {snowDownloadGate} from './download-gate.js?v=snow-serial-v6'
+import {snowFetchBlock} from './area-grid.js?v=snow-serial-v6'
+import {depthIndex,snowDepthBand} from './depths.js?v=snow-serial-v6'
 const DAY=86400000,BASE='https://thredds.met.no/thredds/dodsC/senorge/seNorge_snow',VARIABLES={sd:'snow_depth',swe:'snow_water_equivalent'}
 const iso=day=>new Date(day*DAY).toISOString().slice(0,10)
 function dayNumber(value){const n=Date.parse(`${value}T00:00:00Z`)/DAY;if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isInteger(n)||iso(n)!==value)throw new RangeError('Invalid archive date');return n}
@@ -40,7 +41,7 @@ function retryDelay(ms,signal){
 }
 /** Shared HTTP cap; queued priorities are evaluated again after every request. */
 export class SnowArchiveRequestPool{
- constructor({concurrency=8,onChange=()=>{}}={}){if(!Number.isInteger(concurrency)||concurrency<1||concurrency>32)throw new RangeError('Invalid archive concurrency');this.concurrency=concurrency;this.onChange=onChange;this.active=0;this.queue=[];this.paused=false}
+ constructor({concurrency=1,onChange=()=>{}}={}){if(!Number.isInteger(concurrency)||concurrency<1||concurrency>32)throw new RangeError('Invalid archive concurrency');this.concurrency=concurrency;this.onChange=onChange;this.active=0;this.queue=[];this.paused=false}
  run(fn,{priority=()=>0,signal}={}){
   return new Promise((resolve,reject)=>{
    if(signal?.aborted){reject(signal.reason??abortError());return}
@@ -87,10 +88,10 @@ export class PackedSnowDepthHistory{
 const yieldTask=()=>new Promise(resolve=>setTimeout(resolve,0))
 /** Numeric, browser-readable spatial windows. No raw histories are persisted. */
 export class SnowArchiveSource{
- constructor({fetchImpl=(...args)=>globalThis.fetch(...args),pool=new SnowArchiveRequestPool(),minimumDepthMm=0,maximumPartialBlocks=4,depthBands=false,maximumAttempts=3,retryMs=attempt=>500*2**(attempt-1)}={}){
+ constructor({fetchImpl=(...args)=>globalThis.fetch(...args),pool=new SnowArchiveRequestPool(),minimumDepthMm=0,maximumPartialBlocks=2,blockSize=111,downloadGate=globalThis.location?snowDownloadGate():null,depthBands=false,maximumAttempts=3,retryMs=attempt=>500*2**(attempt-1)}={}){
   if(!Number.isFinite(minimumDepthMm)||minimumDepthMm<0||!Number.isInteger(maximumPartialBlocks)||maximumPartialBlocks<1)throw new RangeError('Invalid snow archive configuration')
   if(!Number.isInteger(maximumAttempts)||maximumAttempts<1||maximumAttempts>5||typeof retryMs!=='function')throw new RangeError('Invalid snow retry policy')
-  Object.assign(this,{fetch:fetchImpl,pool,minimumDepthMm,maximumPartialBlocks,depthBands,maximumAttempts,retryMs});this.partial=new Map();this.inUse=new Set();this.connections=new Set()
+  Object.assign(this,{fetch:fetchImpl,pool,blockSize,downloadGate,minimumDepthMm,maximumPartialBlocks,depthBands,maximumAttempts,retryMs});this.partial=new Map();this.inUse=new Set();this.connections=new Set()
  }
  interruptStalled({force=false,staleMs=15000,now=Date.now()}={}){
   let interrupted=0
@@ -99,10 +100,11 @@ export class SnowArchiveSource{
  }
  release(key,{keep=false}={}){this.inUse.delete(key);if(!keep)this.partial.delete(key);this.prune()}
  prune(){for(const key of this.partial.keys()){if(this.partial.size<=this.maximumPartialBlocks)break;if(!this.inUse.has(key))this.partial.delete(key)}}
- async array(theme,window,block,signal){
+ async array(theme,window,block,signal,onProgress=()=>{}){
   for(let attempt=1;;attempt++){
    signal.throwIfAborted()
    try{
+    if(this.downloadGate)return parseArchiveArray(await this.downloadGate.download(archiveUrl(theme,window,block),{fetchImpl:this.fetch,signal,onProgress}),{days:window.days,width:block.width,height:block.height},VARIABLES[theme])
     const response=await this.fetch(archiveUrl(theme,window,block),{signal:AbortSignal.any([signal,AbortSignal.timeout(60000)]),cache:'no-store'})
     if(!response.ok){const error=new Error(`Snow archive ${theme}: HTTP ${response.status}`);error.status=response.status;throw error}
     return parseArchiveArray(await response.arrayBuffer(),{days:window.days,width:block.width,height:block.height},VARIABLES[theme])
@@ -129,7 +131,7 @@ export class SnowArchiveSource{
   }
  }
  async load({bx,by,cells},cohort,{priority=()=>0}={}){
-  const block=snowFetchBlock(bx,by),windows=fourMonthWindows(cohort.startDate,cohort.endDate),days=dayNumber(cohort.endDate)-dayNumber(cohort.startDate)+1,key=`${cohort.startDate}/${cohort.endDate}/${block.key}`,indices=cells.map(cell=>cell.localIndex)
+  const block=snowFetchBlock(bx,by,this.blockSize),windows=fourMonthWindows(cohort.startDate,cohort.endDate),days=dayNumber(cohort.endDate)-dayNumber(cohort.startDate)+1,key=`${cohort.startDate}/${cohort.endDate}/${block.key}`,indices=cells.map(cell=>cell.localIndex)
   let entry=this.partial.get(key)
   if(!entry||indices.some(i=>entry.history.lookup[i]<0))entry={block,history:new (this.depthBands?PackedSnowDepthHistory:PackedSnowHistory)({cells:block.cells,days,indices}),complete:new Set(),start:dayNumber(cohort.startDate)}
   this.partial.delete(key);this.partial.set(key,entry);this.inUse.add(key);this.prune()
@@ -137,7 +139,7 @@ export class SnowArchiveSource{
   this.connections.add(connection)
   const request=(theme,window,id)=>{
    if(entry.complete.has(id))return Promise.resolve()
-   const promise=this.pool.run(async()=>{const array=await this.array(theme,window,block,controller.signal);connection.lastActivity=Date.now();await this.consume(array,window,entry,{swe:theme==='swe',signal:controller.signal});entry.complete.add(id)},{priority,signal:controller.signal})
+   const promise=this.pool.run(async()=>{const array=await this.array(theme,window,block,controller.signal,()=>{connection.lastActivity=Date.now()});connection.lastActivity=Date.now();await this.consume(array,window,entry,{swe:theme==='swe',signal:controller.signal});entry.complete.add(id)},{priority,signal:controller.signal})
    pending.push(promise);return promise
   }
   try{

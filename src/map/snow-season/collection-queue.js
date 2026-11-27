@@ -1,7 +1,7 @@
-import {hasCell,CHUNK_SIZE,CHUNK_CELLS} from './chunk-codec.js?v=snow-resume-v5'
-import {chunkKey,chunkCell,nativeCell,CHUNK_METRES} from './chunk-grid.js?v=snow-resume-v5'
-import {SNOW_EXTENT} from './grid.js?v=snow-resume-v5'
-import {snowFetchBlock,FETCH_BLOCK_SIZE} from './area-grid.js?v=snow-resume-v5'
+import {hasCell,CHUNK_SIZE,CHUNK_CELLS} from './chunk-codec.js?v=snow-serial-v6'
+import {chunkKey,chunkCell,nativeCell,CHUNK_METRES} from './chunk-grid.js?v=snow-serial-v6'
+import {SNOW_EXTENT} from './grid.js?v=snow-serial-v6'
+import {snowFetchBlock,FETCH_BLOCK_SIZE} from './area-grid.js?v=snow-serial-v6'
 const WORDS=Math.ceil(CHUNK_CELLS/32)
 function popcount(n){n-=n>>>1&0x55555555;n=(n&0x33333333)+(n>>>2&0x33333333);return Math.imul((n+(n>>>4)&0x0f0f0f0f),0x01010101)>>>24}
 /** Uniform pending-bit sampling with a mild viewport-centre acceptance bias.

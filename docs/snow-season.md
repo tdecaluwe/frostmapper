@@ -97,7 +97,7 @@ advertised theme start date.
 - `season-estimator.js`: cohort and independent point-diagnostic reference.
 - `archive-source.js`: numeric DAP2 windows, shared request pool, packed daily
   states, positive-SWE recovery and in-memory retry checkpoints.
-- `area-grid.js`: 37×37 native fetch geometry and model-edge clipping.
+- `area-grid.js`: 111×111 native fetch geometry and model-edge clipping.
 - `nve-source.js`: point-feed diagnostics and comparison.
 - `interval-codec.js`: bounded arithmetic coding of five half-open intervals
   into exactly eight bytes, including empty intervals and leap years.
@@ -122,37 +122,59 @@ advertised theme start date.
 
 ### Spatial and temporal fetching
 
-One 111×111 storage chunk contains nine 37×37 fetch blocks. Fetches are aligned
-to the model's northwest corner (-75000, 8000000) and clipped at the model edges.
-The model has 1195×1550 native cells: 154 storage chunks (11×14), or 1386 fetch
-blocks (33×42). Last storage chunks are 85 cells wide and 107 cells high; last
-fetch blocks are 11 wide and 33 high. Storage/display blocks retain their square
-shape and leave out-of-domain padding unknown and transparent.
+One 111×111 storage chunk is also one spatial request block. Fetches are aligned
+with the model's northwest corner (-75000, 8000000) and clipped at its edges.
+The model has 1195×1550 native cells: 154 chunks (11×14). Edge chunks are
+85 cells wide and 107 cells high. Stored/display blocks leave padding unknown.
 
-Requests span **September–December, January–April, May–August**. Each remains
-inside one calendar-year NetCDF file. The 2005-09-01 to 2025-08-31 cohort needs
-60 depth requests per fetch block; each is at most 123 days and approximately
-674 kB. We read one numeric DAP2 array using native fetch/DataView; no NetCDF
-library, backend or distributed archive is required.
+Requests span **September–December, January–April, May–August**, each within
+one calendar-year file. A 20-winter chunk requires 60 depth requests, versus
+540 for the previous nine 37×37 subdivisions. The total value count is unchanged.
+The largest response contains 123 days and approximately 6.06 MB of Float32
+values. Native fetch/DataView reads one numeric DAP2 array without a NetCDF library.
 
-The shared pool permits eight requests in total, including any SWE recovery.
-Current-view requests take priority when slots become available. Up to four
-working blocks are permitted for foreground responsiveness; ordinary background
-work is limited to two. Completed depth windows are retained in bounded worker
-memory across retries, avoiding an automatic redownload of successful windows.
-Transient network failures (including Safari's `Load failed`), request timeouts,
-HTTP 408/429 and server errors retry the individual window up to three attempts,
-with 0.5/1 second delays. The same shared concurrency cap applies during retries.
-Permanent HTTP errors are not retried at this level. After retries are exhausted,
-the block cancels its remaining requests and pauses new work for 30 seconds.
-Retry or a foreground/online event can resume earlier.
+[MET's THREDDS guidance](https://thredds.met.no/thredds/catalog.html) asks clients
+to avoid parallel downloads. `download-gate.js` holds an origin-wide Web Lock
+through each response body, shared by cooperating tabs and workers. There is
+one local request slot, with dynamic foreground priority. A second region lock
+protects each annual read/modify/save transaction, preventing two tabs from
+fetching the same completed snow year. Ownership locks are temporary; the browser
+releases them on worker termination. A suspended owner can delay other tabs until
+its request finishes or is cancelled. Older running versions must be reloaded to
+participate. Browsers without Web Locks keep cached display available but do not
+start uncoordinated downloads.
 
-Daily values are packed into nibbles: bare, five positive-depth bands,
-positive-presence/unknown-depth (SWE), and wholly unknown. Histories exist only
-for uncached cells and are never persisted. A full 37×37 history needs about
-5.0 MB. Four histories plus eight maximum-size responses total about 25.4 MB,
-before browser copies, runtime overhead and decoded storage chunks. Parsing and
-calculation yield regularly. The histories are released after estimation.
+A small IndexedDB coordination record persists pacing and overload deadlines,
+not lock ownership. A successful download leaves a 250 ms gap. HTTP 429 honors
+an accessible `Retry-After` value (seconds or HTTP date); otherwise its initial
+backoff is 30 s. HTTP 5xx starts at 5 s and transport failures at 1 s, with
+exponential growth, jitter and a 5-minute cap on inferred delays. Explicit
+`Retry-After` is not capped. CORS must expose that header to the browser; when
+it does not, the inferred delay applies. Permanent HTTP errors are not retried.
+Individual requests have up to three attempts. Exhausted retries pause the local
+collector for 30 s. Tab resume/manual retry cannot clear the shared deadline.
+Streaming response progress keeps healthy large downloads from appearing stalled.
+
+`chunk-collector.js` processes one September–August winter at a time. Daily depth
+bands occupy one nibble per uncached cell/day: at most 2,254,743 bytes for one
+111×111 leap-year history (about 2.15 MiB). Two active collectors need at most
+4.30 MiB for packed histories, plus one ~5.78 MiB response, transient body copies,
+lookup arrays, decoded chunks and runtime overhead. These are component estimates,
+not an RSS limit. Ordinary background work uses one collector; a new foreground
+area may use a second. Raw histories are never persisted and are released after
+annual estimation. Processing yields regularly.
+
+Annual encoded words are saved before releasing the region lock. A 20-bit annual
+completion bitmap occupies the existing SSC3 header's reserved word at byte 28.
+Older chunks read as bitmap zero; known cells are preserved and excluded from
+calculation. Pending cells become visible only after their entire 20-year cohort
+is complete. Reopening a tab rechecks disk under the region lock and skips saved
+years. No cache migration or namespace change is required.
+
+A small sequential transport sample on 2026-11-27 (two requests per size, same
+123-day period near Tafjordsfjella) measured 37×37 at 2.120–2.805 s and 111×111 at
+1.388–1.767 s. Response sizes were 673,701 and 6,062,087 bytes respectively. This
+supports reducing request overhead, but is not a sustained throughput guarantee.
 
 For cells with up to eight unresolved dates, the worker requests the necessary
 SWE date windows over the same area. Positive SWE establishes snow presence;
@@ -233,7 +255,7 @@ cannot reopen it for the wrong view.
 
 `pageshow`, foreground visibility and `online` events trigger a debounced local
 worker probe. A responsive worker clears network backoff and restarts only groups
-with no completed download for at least 15 seconds; an `online` transition forces
+with no response progress for at least 15 seconds; an `online` transition forces
 old connections to restart. Completed temporal windows stay in the in-memory
 checkpoint, so reconnecting retries unfinished windows rather than restarting
 all 20 years. Intentional interruptions do not produce a `Load failed` alert.
@@ -243,7 +265,7 @@ A visible tab replaces a worker that fails to answer within 10 seconds, rejects
 its abandoned RPCs and reconstructs work from IndexedDB. Hidden tabs cancel the
 probe, not background collection. A late event from the old worker cannot stop
 its replacement. Persisted annual chunks and the selected depth are preserved;
-unsaved in-memory work can be lost if the browser actually discarded the worker.
+completed snow years survive worker discard; an unfinished year may need to be fetched again.
 
 IndexedDB handles clear on unexpected close or version change. Reads/writes
 retry a closed/interrupted transaction once with a fresh connection. A failed
@@ -286,7 +308,7 @@ assignments give zero days, so that conclusion is invariant.
 and local OpenLayers/proj4 modules. Configure `PLAYWRIGHT_MODULE`,
 `OL_NODE_MODULES`, and optionally `CHROMIUM_PATH`; `SNOW_TEST_ARTIFACTS` enables
 screenshots and JSON results. It serves synthetic numeric DAP2 windows locally
-and checks four-month bounds, 37×37 block geometry, eight-request concurrency,
+and checks four-month bounds, 111×111 block geometry, serial download concurrency,
 active-view priority, hidden-layer collection, immediate cache-hit credit,
 111×111 compressed partial chunks, reload reuse, persisted depth selection, depth-dependent pixels and actual Web
 Mercator reprojection on an iPhone-sized viewport. Old formats are explicitly
@@ -309,3 +331,8 @@ terminated worker and verifies its replacement can read existing cached cells.
 It closes a real IndexedDB connection and checks that reading the same cached
 cell reopens it. Node recovery tests cover transient retries, bounded failures,
 stalled-window checkpoints, abortable retry delays and hidden-tab watchdogs.
+
+`tests/snow-download-node.mjs` checks whole-body lock scope, shared backoff,
+annual checkpoint recovery and concurrent collectors. `tests/snow-download-browser.cjs`
+uses two real tabs/workers to verify a maximum of one concurrent download,
+persistent cooldown after the owner closes, and lock release on worker termination.
