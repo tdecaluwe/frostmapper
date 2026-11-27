@@ -1,10 +1,10 @@
-import {emptyChunk,hasCell,setChunkCell,chunkRecord,compressChunk,decompressChunk} from './chunk-codec.js'
-import {chunkCell,chunkKey} from './chunk-grid.js'
+import {emptyChunk,setChunkCell,chunkRecord,compressChunk,decompressChunk} from './chunk-codec.js?v=snow-111-37x4-v1'
+import {chunkCell,chunkKey} from './chunk-grid.js?v=snow-111-37x4-v1'
 const EXPIRY=30*86400000
-/** Encoded 100x100 blocks only; raw historical time series never reach IndexedDB. */
+/** Encoded 111x111 blocks only; raw historical time series never reach IndexedDB. */
 export class SnowSeasonStore{
  constructor(namespace,{maximum=512,onChange=()=>{}}={}){
-  Object.assign(this,{namespace,maximum,onChange});this.memory=new Map();this.loading=new Map();this.dirty=new Set();this.database=null;this.timer=null;this.writes=0;this.serial=Promise.resolve();this.hasLegacy=false;this.legacy=null
+  Object.assign(this,{namespace,maximum,onChange});this.memory=new Map();this.loading=new Map();this.dirty=new Set();this.database=null;this.timer=null;this.writes=0;this.serial=Promise.resolve()
  }
  async open(){
   if(this.database)return this.database
@@ -13,24 +13,9 @@ export class SnowSeasonStore{
    const request=indexedDB.open('frostmapper-snow-seasons',2);let settled=false
    const finish=value=>{if(!settled){settled=true;resolve(value)}else value?.close()}
    request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains('chunks')){const store=db.createObjectStore('chunks',{keyPath:'id'});store.createIndex('used','used')}}
-   request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>db.close();if(db.objectStoreNames.contains('summaries')){const count=db.transaction('summaries').objectStore('summaries').count();count.onsuccess=()=>{this.hasLegacy=count.result>0;finish(db)};count.onerror=()=>finish(db)}else finish(db)}
+   request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>db.close();finish(db)}
    request.onerror=()=>finish(null);request.onblocked=()=>finish(null)
   });return this.database
- }
- async legacyChunks(){
-  if(!this.hasLegacy)return new Map()
-  if(!this.legacy)this.legacy=(async()=>{
-   const db=await this.open(),prefix=`${this.namespace}/`,index=new Map()
-   const entries=await new Promise(resolve=>{const r=db.transaction('summaries').objectStore('summaries').getAll(IDBKeyRange.bound(prefix,prefix+'\uffff'));r.onsuccess=()=>resolve(r.result);r.onerror=()=>resolve([])})
-   for(const entry of entries){
-    if(Date.now()-entry.used>=EXPIRY)continue
-    const address=chunkCell(entry.id.slice(prefix.length))
-    if(!index.has(address.key))index.set(address.key,[])
-    index.get(address.key).push({index:address.index,value:entry.value})
-   }
-   return index
-  })()
-  return this.legacy
  }
  id(key){return `${this.namespace}/${key}`}
  trim(keep){
@@ -45,11 +30,6 @@ export class SnowSeasonStore{
    if(db){const stored=await new Promise(resolve=>{const request=db.transaction('chunks').objectStore('chunks').get(this.id(key));request.onsuccess=()=>resolve(request.result);request.onerror=()=>resolve(null)})
     if(stored&&Date.now()-stored.updated<EXPIRY)try{chunk=await decompressChunk(stored.payload);if(chunk.cx!==cx||chunk.cy!==cy)chunk=null}catch{/* Invalid cache entries are recomputed. */}}
    chunk??=emptyChunk(cx,cy)
-   const legacy=await this.legacyChunks(),entries=legacy.get(key)
-   if(entries){
-    for(const entry of entries)if(!hasCell(chunk,entry.index))setChunkCell(chunk,entry.index,entry.value)
-    legacy.delete(key);this.dirty.add(key);this.onChange({cx,cy,key});this.scheduleFlush()
-   }
    this.memory.set(key,chunk);this.trim(key);return chunk
   })().finally(()=>this.loading.delete(key));this.loading.set(key,pending);return pending
  }

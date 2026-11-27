@@ -1,5 +1,5 @@
 /** Lossless normalized September–August intervals. No OpenLayers or DOM. */
-export const NO_SEASON=0xffff,UNKNOWN_PERIOD=0xfefe,ESCAPE_PERIOD=0xfdfd,CHUNK_SIZE=100,CHUNK_CELLS=10000
+export const NO_SEASON=0xffff,UNKNOWN_PERIOD=0xfefe,ESCAPE_PERIOD=0xfdfd,CHUNK_SIZE=111,CHUNK_CELLS=CHUNK_SIZE*CHUNK_SIZE
 const REFERENCE=Date.UTC(2001,8,1),DAY=86400000
 export function monthDay(index){return new Date(REFERENCE+index*DAY).toISOString().slice(5,10)}
 export function dayIndex(md){
@@ -31,7 +31,7 @@ export function decodePeriod(word,exception){
  if(encodePeriod(...pair)!==word)throw new RangeError('Noncanonical snow code')
  return pair
 }
-export function emptyChunk(cx,cy){return {cx,cy,words:new Uint16Array(CHUNK_CELLS).fill(UNKNOWN_PERIOD),known:new Uint8Array(CHUNK_CELLS/8),exceptions:new Map(),metadata:new Map(),revision:0}}
+export function emptyChunk(cx,cy){return {cx,cy,words:new Uint16Array(CHUNK_CELLS).fill(UNKNOWN_PERIOD),known:new Uint8Array(Math.ceil(CHUNK_CELLS/8)),exceptions:new Map(),metadata:new Map(),revision:0}}
 export const hasCell=(chunk,index)=>Boolean(chunk.known[index>>>3]&(1<<(index&7)))
 export function setChunkCell(chunk,index,record){
  if(!Number.isInteger(index)||index<0||index>=CHUNK_CELLS)throw new RangeError('Invalid chunk cell')
@@ -52,21 +52,21 @@ export function chunkRecord(chunk,index){
 /** All words and escapes are explicitly little endian. Pending != known unknown. */
 export function encodeChunk(chunk){
  const metadata=new TextEncoder().encode(JSON.stringify([...chunk.metadata])),exceptionCount=chunk.exceptions.size
- const bytes=new Uint8Array(24+20000+1250+exceptionCount*4+metadata.length),v=new DataView(bytes.buffer)
- bytes.set([83,83,67,49]);v.setUint16(4,100,true);v.setUint16(6,100,true);v.setInt16(8,chunk.cx,true);v.setInt16(10,chunk.cy,true);v.setUint32(12,exceptionCount,true);v.setUint32(16,metadata.length,true)
- for(let i=0;i<10000;i++)v.setUint16(24+2*i,chunk.words[i],true)
- bytes.set(chunk.known,20024);let pos=21274,count=0
- for(let i=0;i<10000;i++)if(hasCell(chunk,i)&&chunk.words[i]===ESCAPE_PERIOD){const pair=chunk.exceptions.get(i);decodePeriod(ESCAPE_PERIOD,pair);v.setUint16(pos,pair[0],true);v.setUint16(pos+2,pair[1],true);pos+=4;count++}
+ const bytes=new Uint8Array(24+CHUNK_CELLS*2+Math.ceil(CHUNK_CELLS/8)+exceptionCount*4+metadata.length),v=new DataView(bytes.buffer)
+ bytes.set([83,83,67,50]);v.setUint16(4,CHUNK_SIZE,true);v.setUint16(6,CHUNK_SIZE,true);v.setInt16(8,chunk.cx,true);v.setInt16(10,chunk.cy,true);v.setUint32(12,exceptionCount,true);v.setUint32(16,metadata.length,true)
+ for(let i=0;i<CHUNK_CELLS;i++)v.setUint16(24+2*i,chunk.words[i],true)
+ bytes.set(chunk.known,24+CHUNK_CELLS*2);let pos=24+CHUNK_CELLS*2+Math.ceil(CHUNK_CELLS/8),count=0
+ for(let i=0;i<CHUNK_CELLS;i++)if(hasCell(chunk,i)&&chunk.words[i]===ESCAPE_PERIOD){const pair=chunk.exceptions.get(i);decodePeriod(ESCAPE_PERIOD,pair);v.setUint16(pos,pair[0],true);v.setUint16(pos+2,pair[1],true);pos+=4;count++}
  if(count!==exceptionCount)throw new RangeError('Snow exception count mismatch')
  bytes.set(metadata,pos);return bytes
 }
 export function decodeChunk(input){
- const bytes=input instanceof Uint8Array?input:new Uint8Array(input)
- if(bytes.length<21274||bytes[0]!==83||bytes[1]!==83||bytes[2]!==67||bytes[3]!==49)throw new RangeError('Invalid snow chunk header')
+ const bytes=input instanceof Uint8Array?input:new Uint8Array(input),dataEnd=24+CHUNK_CELLS*2+Math.ceil(CHUNK_CELLS/8)
+ if(bytes.length<dataEnd||bytes[0]!==83||bytes[1]!==83||bytes[2]!==67||bytes[3]!==50)throw new RangeError('Invalid snow chunk header')
  const v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),count=v.getUint32(12,true),metadataLength=v.getUint32(16,true)
- if(v.getUint16(4,true)!==100||v.getUint16(6,true)!==100||count>10000||bytes.length!==21274+4*count+metadataLength)throw new RangeError('Invalid snow chunk size')
- const chunk=emptyChunk(v.getInt16(8,true),v.getInt16(10,true));chunk.known.set(bytes.subarray(20024,21274));let pos=21274,seen=0
- for(let i=0;i<10000;i++){
+ if(v.getUint16(4,true)!==CHUNK_SIZE||v.getUint16(6,true)!==CHUNK_SIZE||count>CHUNK_CELLS||bytes.length!==dataEnd+4*count+metadataLength)throw new RangeError('Invalid snow chunk size')
+ const chunk=emptyChunk(v.getInt16(8,true),v.getInt16(10,true));chunk.known.set(bytes.subarray(24+CHUNK_CELLS*2,dataEnd));let pos=dataEnd,seen=0
+ for(let i=0;i<CHUNK_CELLS;i++){
   chunk.words[i]=v.getUint16(24+2*i,true)
   if(!hasCell(chunk,i))continue
   if(chunk.words[i]===ESCAPE_PERIOD){if(++seen>count)throw new RangeError('Missing snow exception');chunk.exceptions.set(i,[v.getUint16(pos,true),v.getUint16(pos+2,true)]);pos+=4}
@@ -74,8 +74,8 @@ export function decodeChunk(input){
  }
  if(seen!==count)throw new RangeError('Snow exception count mismatch')
  const entries=JSON.parse(new TextDecoder().decode(bytes.subarray(pos)))
- if(!Array.isArray(entries)||entries.length>10000)throw new RangeError('Invalid snow metadata')
- for(const entry of entries){if(!Array.isArray(entry)||entry.length!==2||!Number.isInteger(entry[0])||entry[0]<0||entry[0]>=10000||!hasCell(chunk,entry[0])||!entry[1]||typeof entry[1]!=='object'||Array.isArray(entry[1])||chunk.metadata.has(entry[0]))throw new RangeError('Invalid snow metadata');chunk.metadata.set(...entry)}
+ if(!Array.isArray(entries)||entries.length>CHUNK_CELLS)throw new RangeError('Invalid snow metadata')
+ for(const entry of entries){if(!Array.isArray(entry)||entry.length!==2||!Number.isInteger(entry[0])||entry[0]<0||entry[0]>=CHUNK_CELLS||!hasCell(chunk,entry[0])||!entry[1]||typeof entry[1]!=='object'||Array.isArray(entry[1])||chunk.metadata.has(entry[0]))throw new RangeError('Invalid snow metadata');chunk.metadata.set(...entry)}
  return chunk
 }
 export async function compressChunk(chunk){

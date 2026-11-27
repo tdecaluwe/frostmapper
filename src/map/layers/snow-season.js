@@ -3,9 +3,9 @@ import proj4 from 'proj4'
 import {register} from 'ol/proj/proj4.js'
 import {get as getProjection,transform,transformExtent} from 'ol/proj.js'
 import {createMapView} from '../projections/view.js?v=viewport-model'
-import {SnowSeasonRasterSource} from '../snow-season/raster-source.js'
-import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js'
-import {SnowSeasonEstimator} from '../snow-season/season-estimator.js'
+import {SnowSeasonRasterSource} from '../snow-season/raster-source.js?v=snow-111-37x4-v1'
+import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js?v=snow-111-37x4-v1'
+import {SnowSeasonEstimator} from '../snow-season/season-estimator.js?v=snow-111-37x4-v1'
 
 export class SnowSeasonLayer{
  constructor(map){
@@ -63,7 +63,7 @@ export class SnowSeasonLayer{
  }
  ensureWorker(){
   if(this.worker)return true
-  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-fetch-8',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
+  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-111-37x4-v1',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
   this.worker.onmessage=({data})=>{
    if(data.id&&this.requests.has(data.id)){
     const pending=this.requests.get(data.id);this.requests.delete(data.id)
@@ -72,8 +72,8 @@ export class SnowSeasonLayer{
    }
    if(data.type==='chunks')this.source.chunksChanged(data.keys)
    else if(data.type==='progress'&&!data.paused){
-    this.retry.hidden=true;this.status.dataset.state=data.active?'collecting':'idle'
-    this.status.textContent=data.total?`Snow data: ${data.completed.toLocaleString()} / ${data.total.toLocaleString()} cells${data.active?` · fetching ${data.active}`:' · cached'}`:(data.preparing?'Snow data: reading cached chunks…':'Snow data: move to Norway or Sweden to collect')
+    this.retry.hidden=true;this.status.dataset.state=data.active||data.processing?'collecting':'idle'
+    this.status.textContent=data.total?`Snow data: ${data.completed.toLocaleString()} / ${data.total.toLocaleString()} cells${data.active?` · fetching ${data.active}`:data.processing?' · calculating…':' · cached'}`:(data.preparing?'Snow data: reading cached chunks…':'Snow data: move to Norway or Sweden to collect')
    }
    else if(data.type==='error'){this.status.dataset.state='error';this.status.textContent=`Snow data unavailable: ${data.message}`;this.retry.hidden=false}
   }

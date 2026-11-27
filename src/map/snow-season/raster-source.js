@@ -2,8 +2,9 @@ import TileImageSource from 'ol/source/TileImage.js'
 import Tile from 'ol/Tile.js'
 import TileState from 'ol/TileState.js'
 import TileGrid from 'ol/tilegrid/TileGrid.js'
-import {SNOW_EXTENT} from './grid.js'
-import {SNOW_RESOLUTIONS,displayTileExtent,CHUNK_METRES} from './chunk-grid.js'
+import {SNOW_EXTENT} from './grid.js?v=snow-111-37x4-v1'
+import {CHUNK_SIZE} from './chunk-codec.js?v=snow-111-37x4-v1'
+import {SNOW_RESOLUTIONS,displayTileExtent,CHUNK_METRES} from './chunk-grid.js?v=snow-111-37x4-v1'
 /** Canvas-backed native tiles; avoids encoding an image just to decode it again. */
 class SnowCanvasTile extends Tile{
  constructor(coord,state,src,crossOrigin,loader,options){super(coord,state,options);this.src=src;this.loader=loader;this.image=null}
@@ -11,16 +12,16 @@ class SnowCanvasTile extends Tile{
  load(){if(this.state!==TileState.IDLE&&this.state!==TileState.ERROR)return;this.setState(TileState.LOADING);this.loader(this,this.src)}
  setImage(canvas){this.image=canvas;this.setState(TileState.LOADED)}
 }
-/** 100x100 display tiles at 16/8/4/2/1 km per pixel, derived from cached chunks. */
+/** 111x111 display tiles at 16/8/4/2/1 km per pixel, derived from cached chunks. */
 export class SnowSeasonRasterSource extends TileImageSource{
  constructor(requestTile){
-  super({projection:'EPSG:32633',tileGrid:new TileGrid({extent:SNOW_EXTENT,origin:[SNOW_EXTENT[0],SNOW_EXTENT[3]],tileSize:100,resolutions:SNOW_RESOLUTIONS}),tileClass:SnowCanvasTile,wrapX:false,interpolate:false,transition:0,tileUrlFunction:coord=>coord.join('/'),attributions:'Snow season estimates: Frostmapper · <a href="https://www.senorge.no/">NVE seNorge</a> (NLOD)'})
+  super({projection:'EPSG:32633',tileGrid:new TileGrid({extent:SNOW_EXTENT,origin:[SNOW_EXTENT[0],SNOW_EXTENT[3]],tileSize:CHUNK_SIZE,resolutions:SNOW_RESOLUTIONS}),tileClass:SnowCanvasTile,wrapX:false,interpolate:false,transition:0,tileUrlFunction:coord=>coord.join('/'),attributions:'Snow season estimates: Frostmapper · <a href="https://www.senorge.no/">NVE seNorge</a> (NLOD)'})
   this.requestTile=requestTile;this.metric='length';this.nativeTiles=new Map();this.epoch=0;this.refreshTimer=null
   this.setTileLoadFunction(tile=>{
    const [z,x,y]=tile.tileCoord,epoch=this.epoch
    this.requestTile({z,x,y,metric:this.metric}).then(pixels=>{
     if(epoch!==this.epoch){tile.setState(TileState.EMPTY);return}
-    const canvas=document.createElement('canvas');canvas.width=100;canvas.height=100;canvas.getContext('2d').putImageData(new ImageData(pixels,100,100),0,0);tile.setImage(canvas)
+    const canvas=document.createElement('canvas');canvas.width=CHUNK_SIZE;canvas.height=CHUNK_SIZE;canvas.getContext('2d').putImageData(new ImageData(pixels,CHUNK_SIZE,CHUNK_SIZE),0,0);tile.setImage(canvas)
    }).catch(()=>tile.setState(TileState.ERROR))
   });this.setKey('snow/length/0')
  }

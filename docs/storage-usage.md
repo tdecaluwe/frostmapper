@@ -8,7 +8,7 @@ Layer owners register `storageLabel`, optional `storageId`, and `storageStores`
 (`{database, store}` pairs) as OpenLayers layer properties. The control discovers
 these when opened/refreshed, traversing layer groups and deduplicating owners.
 Only the snow-season layer currently has IndexedDB stores: `chunks` (compressed
-100×100 blocks, across cohorts) and `summaries` (legacy per-cell estimates).
+111×111 blocks and older cached formats, across cohorts) and `summaries` (legacy per-cell estimates).
 Other layers show zero IndexedDB usage. Projection atlases use localStorage;
 network tile caching and in-memory OpenLayers tiles are separate.
 

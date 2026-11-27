@@ -1,14 +1,15 @@
-import {SNOW_EXTENT,CELL_SIZE,cellKey} from './grid.js'
-export const CHUNK_METRES=100*CELL_SIZE
+import {SNOW_EXTENT,CELL_SIZE,cellKey} from './grid.js?v=snow-111-37x4-v1'
+import {CHUNK_SIZE} from './chunk-codec.js?v=snow-111-37x4-v1'
+export const CHUNK_METRES=CHUNK_SIZE*CELL_SIZE
 export const SNOW_RESOLUTIONS=[16000,8000,4000,2000,1000]
 export const chunkKey=(cx,cy)=>`${cx}/${cy}`
 export function chunkCell(key){
  const [x,y]=key.split('/').map(Number),col=x-SNOW_EXTENT[0]/1000,row=SNOW_EXTENT[3]/1000-y-1
- const cx=Math.floor(col/100),cy=Math.floor(row/100),index=(row-cy*100)*100+col-cx*100
+ const cx=Math.floor(col/CHUNK_SIZE),cy=Math.floor(row/CHUNK_SIZE),index=(row-cy*CHUNK_SIZE)*CHUNK_SIZE+col-cx*CHUNK_SIZE
  return {cx,cy,index,key:chunkKey(cx,cy)}
 }
 export function nativeCell(cx,cy,index){
- const x=SNOW_EXTENT[0]+(cx*100+index%100+.5)*1000,y=SNOW_EXTENT[3]-(cy*100+Math.floor(index/100)+.5)*1000
+ const x=SNOW_EXTENT[0]+(cx*CHUNK_SIZE+index%CHUNK_SIZE+.5)*1000,y=SNOW_EXTENT[3]-(cy*CHUNK_SIZE+Math.floor(index/CHUNK_SIZE)+.5)*1000
  return {x,y,key:cellKey(x,y)}
 }
 export const inSnowDomain=({x,y})=>x>=SNOW_EXTENT[0]&&x<SNOW_EXTENT[2]&&y>=SNOW_EXTENT[1]&&y<SNOW_EXTENT[3]
@@ -21,6 +22,6 @@ export function chunksForExtent(extent){
  return result
 }
 export function displayTileExtent(z,x,y){
- const span=100*SNOW_RESOLUTIONS[z],left=SNOW_EXTENT[0]+x*span,top=SNOW_EXTENT[3]-y*span
+ const span=CHUNK_SIZE*SNOW_RESOLUTIONS[z],left=SNOW_EXTENT[0]+x*span,top=SNOW_EXTENT[3]-y*span
  return [left,top-span,left+span,top]
 }
