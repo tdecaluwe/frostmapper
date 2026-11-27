@@ -1,21 +1,34 @@
-import {emptyChunk,setChunkCell,chunkRecord,chunkValue,compressChunk,decompressChunk} from './annual-chunk-codec.js?v=snow-refresh-v4'
-import {chunkCell,chunkKey} from './chunk-grid.js?v=snow-refresh-v4'
+import {emptyChunk,setChunkCell,chunkRecord,chunkValue,compressChunk,decompressChunk} from './annual-chunk-codec.js?v=snow-resume-v5'
+import {chunkCell,chunkKey} from './chunk-grid.js?v=snow-resume-v5'
 const EXPIRY=30*86400000
 /** Encoded 111x111 blocks only; raw historical time series never reach IndexedDB. */
 export class SnowSeasonStore{
  constructor(namespace,{maximum=512,onChange=()=>{},firstEndYear=new Date().getUTCFullYear()-20,years=20}={}){
-  Object.assign(this,{namespace,maximum,onChange,firstEndYear,years});this.memory=new Map();this.loading=new Map();this.dirty=new Set();this.database=null;this.timer=null;this.writes=0;this.serial=Promise.resolve()
+  Object.assign(this,{namespace,maximum,onChange,firstEndYear,years});this.memory=new Map();this.loading=new Map();this.dirty=new Set();this.database=null;this.connection=null;this.timer=null;this.writes=0;this.serial=Promise.resolve()
  }
  async open(){
   if(this.database)return this.database
   this.database=new Promise(resolve=>{
    if(!globalThis.indexedDB){resolve(null);return}
-   const request=indexedDB.open('frostmapper-snow-seasons',2);let settled=false
+   let request;try{request=indexedDB.open('frostmapper-snow-seasons',2)}catch{resolve(null);return}let settled=false
    const finish=value=>{if(!settled){settled=true;resolve(value)}else value?.close()}
    request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains('chunks')){const store=db.createObjectStore('chunks',{keyPath:'id'});store.createIndex('used','used')}}
-   request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>db.close();finish(db)}
+   request.onsuccess=()=>{
+    const db=request.result;if(settled){db.close();return}this.connection=db
+    const closed=()=>{if(this.connection===db){this.connection=null;this.database=null}}
+    db.onversionchange=()=>{closed();db.close()};db.onclose=closed;finish(db)
+   }
    request.onerror=()=>finish(null);request.onblocked=()=>finish(null)
-  });return this.database
+  });const pending=this.database;pending.then(db=>{if(!db&&this.database===pending)this.database=null});return pending
+ }
+ async useDatabase(operation){
+  for(let attempt=0;attempt<2;attempt++){
+   const db=await this.open();if(!db)return null
+   try{return await operation(db)}catch(error){
+    if(attempt||!['InvalidStateError','TransactionInactiveError','AbortError','UnknownError'].includes(error?.name))throw error
+    if(this.connection===db){this.connection=null;this.database=null;db.close()}
+   }
+  }
  }
  id(key){return `${this.namespace}/${key}`}
  trim(keep){
@@ -26,9 +39,9 @@ export class SnowSeasonStore{
   if(this.memory.has(key)){const chunk=this.memory.get(key);this.memory.delete(key);this.memory.set(key,chunk);return chunk}
   if(this.loading.has(key))return this.loading.get(key)
   const pending=(async()=>{
-   const db=await this.open();let chunk=null
-   if(db){const stored=await new Promise(resolve=>{const request=db.transaction('chunks').objectStore('chunks').get(this.id(key));request.onsuccess=()=>resolve(request.result);request.onerror=()=>resolve(null)})
-    if(stored&&Date.now()-stored.updated<EXPIRY)try{chunk=await decompressChunk(stored.payload);if(chunk.cx!==cx||chunk.cy!==cy||chunk.firstEndYear!==this.firstEndYear||chunk.years!==this.years)chunk=null}catch{/* Invalid cache entries are recomputed. */}}
+   let chunk=null
+   const stored=await this.useDatabase(db=>new Promise((resolve,reject)=>{const tx=db.transaction('chunks'),request=tx.objectStore('chunks').get(this.id(key));request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);tx.onabort=()=>reject(tx.error??new DOMException('Cache read interrupted','AbortError'))}))
+   if(stored&&Date.now()-stored.updated<EXPIRY)try{chunk=await decompressChunk(stored.payload);if(chunk.cx!==cx||chunk.cy!==cy||chunk.firstEndYear!==this.firstEndYear||chunk.years!==this.years)chunk=null}catch{/* Invalid cache entries are recomputed. */}
    chunk??=emptyChunk(cx,cy,this)
    this.memory.set(key,chunk);this.trim(key);return chunk
   })().finally(()=>this.loading.delete(key));this.loading.set(key,pending);return pending
@@ -44,17 +57,17 @@ export class SnowSeasonStore{
   setChunkCell(chunk,address.index,record);this.memory.set(address.key,chunk);this.dirty.add(address.key);this.onChange(address)
   this.scheduleFlush()
  }
- scheduleFlush(){if(!this.timer){this.timer=setTimeout(()=>{this.timer=null;this.flush()},2000);this.timer.unref?.()}}
+ scheduleFlush(){if(!this.timer){this.timer=setTimeout(()=>{this.timer=null;this.flush().catch(()=>{/* Dirty chunks remain available for the next save. */})},2000);this.timer.unref?.()}}
  flush(){
   if(this.timer){clearTimeout(this.timer);this.timer=null}
   this.serial=this.serial.catch(()=>{}).then(async()=>{
-   const db=await this.open();if(!db)return
+   if(!await this.open())return
    for(const key of [...this.dirty]){
     const chunk=this.memory.get(key);if(!chunk)continue
     const revision=chunk.revision,payload=await compressChunk(chunk),now=Date.now()
-    const saved=await new Promise(resolve=>{const tx=db.transaction('chunks','readwrite');tx.objectStore('chunks').put({id:this.id(key),used:now,updated:now,payload});tx.oncomplete=()=>resolve(true);tx.onerror=()=>resolve(false);tx.onabort=()=>resolve(false)})
+    const saved=await this.useDatabase(db=>new Promise((resolve,reject)=>{const tx=db.transaction('chunks','readwrite');tx.objectStore('chunks').put({id:this.id(key),used:now,updated:now,payload});tx.oncomplete=()=>resolve(true);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error??new DOMException('Cache write interrupted','AbortError'))}))
     if(saved&&chunk.revision===revision)this.dirty.delete(key)
-    if(saved&&++this.writes%32===0)await this.prune(db)
+    if(saved&&++this.writes%32===0)await this.useDatabase(db=>this.prune(db))
    }
    this.trim()
   });return this.serial

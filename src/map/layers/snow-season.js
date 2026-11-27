@@ -3,10 +3,11 @@ import proj4 from 'proj4'
 import {register} from 'ol/proj/proj4.js'
 import {get as getProjection,transform,transformExtent} from 'ol/proj.js'
 import {createMapView} from '../projections/view.js?v=viewport-model'
-import {SnowSeasonRasterSource} from '../snow-season/raster-source.js?v=snow-refresh-v4'
-import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js?v=snow-refresh-v4'
-import {SnowSeasonEstimator} from '../snow-season/season-estimator.js?v=snow-refresh-v4'
-import {SNOW_DEPTHS_CM} from '../snow-season/depths.js?v=snow-refresh-v4'
+import {SnowSeasonRasterSource} from '../snow-season/raster-source.js?v=snow-resume-v5'
+import {SNOW_EXTENT,cellKey} from '../snow-season/grid.js?v=snow-resume-v5'
+import {SnowSeasonEstimator} from '../snow-season/season-estimator.js?v=snow-resume-v5'
+import {SNOW_DEPTHS_CM} from '../snow-season/depths.js?v=snow-resume-v5'
+import {SnowTabRecovery} from '../snow-season/tab-recovery.js?v=snow-resume-v5'
 
 export class SnowSeasonLayer{
  constructor(map){
@@ -19,7 +20,8 @@ export class SnowSeasonLayer{
   this.createControls();map.on('moveend',()=>this.updateView());map.on('change:view',()=>this.updateView());map.on('singleclick',event=>this.inspect(event.coordinate))
   const selected=new URL(location.href).searchParams.get('snow')
   if(['1','length','start','end'].includes(selected)){this.toggle.checked=true;if(selected!=='1'){this.metric=selected;this.selector.value=selected}this.enable()}
-  this.updateView();addEventListener('pagehide',()=>this.worker?.postMessage({type:'flush'}))
+  this.recovery=new SnowTabRecovery({resume:(force,options)=>this.resumeWorker(force,options),restart:()=>this.restartWorker(),flush:()=>this.worker?.postMessage({type:'flush'})})
+  this.updateView()
  }
  createControls(){
   const root=document.createElement('div');root.id='snow-season-controls'
@@ -79,8 +81,10 @@ export class SnowSeasonLayer{
  }
  ensureWorker(){
   if(this.worker)return true
-  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-refresh-v4',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
-  this.worker.onmessage=({data})=>{
+  try{this.worker=new Worker(new URL('../snow-season/season-worker.js?v=snow-resume-v5',import.meta.url),{type:'module'})}catch{this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false;return false}
+  const worker=this.worker
+  worker.onmessage=({data})=>{
+   if(this.worker!==worker)return
    if(data.id&&this.requests.has(data.id)){
     const pending=this.requests.get(data.id);this.requests.delete(data.id)
     if(data.type==='request-error')pending.reject(new Error(data.message));else pending.resolve(data.type==='tile'?data.pixels:data.value)
@@ -91,19 +95,37 @@ export class SnowSeasonLayer{
     this.retry.hidden=true;this.status.dataset.state=data.active||data.processing?'collecting':'idle'
     this.status.textContent=data.total?`Snow data: ${data.completed.toLocaleString()} / ${data.total.toLocaleString()} cells${data.active?` · fetching ${data.active}`:data.processing?' · calculating…':' · cached'}`:(data.preparing?'Snow data: reading cached chunks…':'Snow data: move to Norway or Sweden to collect')
    }
-   else if(data.type==='error'){this.status.dataset.state='error';this.status.textContent=`Snow data unavailable: ${data.message}`;this.retry.hidden=false}
+   else if(data.type==='error'){this.status.dataset.state='error';this.status.textContent=data.retrying?'Snow connection interrupted · retrying automatically…':`Snow data unavailable: ${data.message}`;this.retry.hidden=false}
   }
-  this.worker.onerror=()=>{
+  worker.onerror=()=>{
+   if(this.worker!==worker)return
    this.status.dataset.state='error';this.status.textContent='Snow worker unavailable';this.retry.hidden=false
    for(const pending of this.requests.values())pending.reject(new Error('Snow worker unavailable'))
-   this.requests.clear();this.worker.terminate();this.worker=null
+   this.requests.clear();worker.terminate();this.worker=null
   }
   return true
  }
- request(type,payload){
+ resumeWorker(force,options){
+  if(!this.worker){this.source.invalidate();this.updateView(true)}
+  return this.request('resume',{force},options)
+ }
+ restartWorker(){
+  this.cancelInspection();this.readout.hidden=true
+  this.worker?.terminate();this.worker=null
+  for(const pending of this.requests.values())pending.reject(new DOMException('Snow worker restarted','AbortError'))
+  this.requests.clear();this.source.invalidate();this.updateView(true)
+ }
+ request(type,payload,{signal}={}){
+  if(signal?.aborted)return Promise.reject(signal.reason??new DOMException('Snow request cancelled','AbortError'))
   if(!this.ensureWorker())return Promise.reject(new Error('Snow worker unavailable'))
   const id=++this.requestId
-  return new Promise((resolve,reject)=>{this.requests.set(id,{resolve,reject});this.worker.postMessage({...payload,type,id})})
+  return new Promise((resolve,reject)=>{
+   const cleanup=()=>signal?.removeEventListener('abort',abort)
+   const abort=()=>{this.requests.delete(id);cleanup();reject(signal.reason??new DOMException('Snow request cancelled','AbortError'))}
+   this.requests.set(id,{resolve:value=>{cleanup();resolve(value)},reject:error=>{cleanup();reject(error)}})
+   signal?.addEventListener('abort',abort,{once:true})
+   try{this.worker.postMessage({...payload,type,id})}catch(error){this.requests.delete(id);cleanup();reject(error)}
+  })
  }
  updateView(retry=false){
   if(retry)this.retry.hidden=true;this.cancelInspection();this.readout.hidden=true;const view=this.map.getView();let extent=null

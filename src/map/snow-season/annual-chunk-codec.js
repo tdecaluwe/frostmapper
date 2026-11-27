@@ -1,6 +1,6 @@
-import {CHUNK_SIZE,CHUNK_CELLS,hasCell} from './chunk-codec.js?v=snow-refresh-v4'
-import {summarizeAnnualSeasons} from './annual-seasons.js?v=snow-refresh-v4'
-import {depthIndex} from './depths.js?v=snow-refresh-v4'
+import {CHUNK_SIZE,CHUNK_CELLS,hasCell} from './chunk-codec.js?v=snow-resume-v5'
+import {summarizeAnnualSeasons} from './annual-seasons.js?v=snow-resume-v5'
+import {depthIndex} from './depths.js?v=snow-resume-v5'
 export {CHUNK_SIZE,CHUNK_CELLS,hasCell}
 export function emptyChunk(cx,cy,{firstEndYear=new Date().getUTCFullYear()-20,years=20}={}){
  return {cx,cy,firstEndYear,years,data:new Uint8Array(0),quality:new Uint8Array(0),known:new Uint8Array(Math.ceil(CHUNK_CELLS/8)),revision:0,summary:null}

@@ -42,7 +42,7 @@ test('SWE repairs positive evidence only, while zero SWE remains unknown',async(
 })
 test('failed supplementary requests resume without downloading completed depth windows again',async()=>{
  const missing=day('2024-01-18');let fail=true;const calls=[]
- const source=new SnowArchiveSource({fetchImpl:async url=>{const q=archiveQuery(url);calls.push(q);if(q.theme==='swe'&&fail)return {ok:false,status:503};return {ok:true,arrayBuffer:async()=>archiveFixture(url,{overrides:[{theme:'sd',x:block.xFirst,y:block.yLast,value:d=>d===missing?NaN:1}]}).buffer}}})
+ const source=new SnowArchiveSource({maximumAttempts:1,fetchImpl:async url=>{const q=archiveQuery(url);calls.push(q);if(q.theme==='swe'&&fail)return {ok:false,status:503};return {ok:true,arrayBuffer:async()=>archiveFixture(url,{overrides:[{theme:'sd',x:block.xFirst,y:block.yLast,value:d=>d===missing?NaN:1}]}).buffer}}})
  const task={bx:0,by:0,cells:[{localIndex:0}]};await assert.rejects(()=>source.load(task,cohort),/503/);fail=false;const loaded=await source.load(task,cohort);assert.equal(calls.filter(c=>c.theme==='sd').length,3);assert.equal(calls.filter(c=>c.theme==='swe').length,2);assert.equal(loaded.inputForCell(0).cover[missing-day(cohort.startDate)],1)
 })
 test('request pool reprioritizes queued work, pauses, and enforces a shared limit',async()=>{

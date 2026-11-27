@@ -1,7 +1,7 @@
-import {CHUNK_CELLS,CHUNK_SIZE,hasCell} from './annual-chunk-codec.js?v=snow-refresh-v4'
-import {depthIndex} from './depths.js?v=snow-refresh-v4'
-import {chunksForExtent,nativeCell,SNOW_RESOLUTIONS,displayTileExtent,inSnowDomain} from './chunk-grid.js?v=snow-refresh-v4'
-import {snowColor} from './grid.js?v=snow-refresh-v4'
+import {CHUNK_CELLS,CHUNK_SIZE,hasCell} from './annual-chunk-codec.js?v=snow-resume-v5'
+import {depthIndex} from './depths.js?v=snow-resume-v5'
+import {chunksForExtent,nativeCell,SNOW_RESOLUTIONS,displayTileExtent,inSnowDomain} from './chunk-grid.js?v=snow-resume-v5'
+import {snowColor} from './grid.js?v=snow-resume-v5'
 /** Worker-side aggregation; neither NVE fetching nor statistics enter OL's render loop. */
 export async function renderSnowTile(store,{z,x,y,metric,minimumDepth=0},{signal}={}){
  depthIndex(minimumDepth)

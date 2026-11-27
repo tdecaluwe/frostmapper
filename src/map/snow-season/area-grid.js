@@ -1,4 +1,4 @@
-import {SNOW_EXTENT} from './grid.js?v=snow-refresh-v4'
+import {SNOW_EXTENT} from './grid.js?v=snow-resume-v5'
 export const FETCH_BLOCK_SIZE=37
 const COLS=(SNOW_EXTENT[2]-SNOW_EXTENT[0])/1000,ROWS=(SNOW_EXTENT[3]-SNOW_EXTENT[1])/1000
 export function snowFetchBlock(bx,by){

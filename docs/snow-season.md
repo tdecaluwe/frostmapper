@@ -116,7 +116,9 @@ advertised theme start date.
 - `render-queue.js`: shared rendering, viewport/scale priority, preemption of
   preload work and cancellation of obsolete depth/metric selections.
 - `raster-source.js`: canvas-backed OpenLayers source, updated on chunk changes.
-- `layers/snow-season.js`: controls, viewport priority and asynchronous inspection.
+- `layers/snow-season.js`: controls, viewport priority, worker RPC and inspection.
+- `tab-recovery.js`: tab/connection lifecycle, debounced worker liveness probes
+  and one bounded worker replacement when a visible tab cannot reach its worker.
 
 ### Spatial and temporal fetching
 
@@ -138,8 +140,12 @@ Current-view requests take priority when slots become available. Up to four
 working blocks are permitted for foreground responsiveness; ordinary background
 work is limited to two. Completed depth windows are retained in bounded worker
 memory across retries, avoiding an automatic redownload of successful windows.
-A failed request cancels its block's remaining requests and pauses new work for
-30 seconds. Retry can resume earlier.
+Transient network failures (including Safari's `Load failed`), request timeouts,
+HTTP 408/429 and server errors retry the individual window up to three attempts,
+with 0.5/1 second delays. The same shared concurrency cap applies during retries.
+Permanent HTTP errors are not retried at this level. After retries are exhausted,
+the block cancels its remaining requests and pauses new work for 30 seconds.
+Retry or a foreground/online event can resume earlier.
 
 Daily values are packed into nibbles: bare, five positive-depth bands,
 positive-presence/unknown-depth (SWE), and wholly unknown. Histories exist only
@@ -222,6 +228,29 @@ excluding network waits and disk flushes. Cached inspections normally update
 without a loading message; the message appears only after 150 ms. Moving the map,
 changing depth or hiding the layer cancels the old readout, so a late result
 cannot reopen it for the wrong view.
+
+### Returning to suspended tabs
+
+`pageshow`, foreground visibility and `online` events trigger a debounced local
+worker probe. A responsive worker clears network backoff and restarts only groups
+with no completed download for at least 15 seconds; an `online` transition forces
+old connections to restart. Completed temporal windows stay in the in-memory
+checkpoint, so reconnecting retries unfinished windows rather than restarting
+all 20 years. Intentional interruptions do not produce a `Load failed` alert.
+Healthy recent transfers are left running on ordinary foreground events.
+
+A visible tab replaces a worker that fails to answer within 10 seconds, rejects
+its abandoned RPCs and reconstructs work from IndexedDB. Hidden tabs cancel the
+probe, not background collection. A late event from the old worker cannot stop
+its replacement. Persisted annual chunks and the selected depth are preserved;
+unsaved in-memory work can be lost if the browser actually discarded the worker.
+
+IndexedDB handles clear on unexpected close or version change. Reads/writes
+retry a closed/interrupted transaction once with a fresh connection. A failed
+read is not silently classified as a cache miss, and failed writes leave dirty
+chunks intact for a later save. This uses the existing `SSC3` format and cache
+namespace; no migration or cache reset is required.
+
  The snow-data progress line and
 retry control remain visible in the menu when display settings are collapsed.
 
@@ -231,7 +260,7 @@ No new runtime dependencies or build tools are required. Use a recent Node.js
 with built-in fetch:
 
 ```sh
-node --test tests/snow-season-node.mjs tests/snow-chunks-node.mjs tests/snow-archive-node.mjs tests/snow-depths-node.mjs tests/snow-render-node.mjs
+node --test tests/snow-season-node.mjs tests/snow-chunks-node.mjs tests/snow-archive-node.mjs tests/snow-depths-node.mjs tests/snow-render-node.mjs tests/snow-recovery-node.mjs
 node tools/snow-season/sample.mjs 120450 6908350 trek-season.json
 ```
 
@@ -274,3 +303,9 @@ nontransparent pixels through an actual Web Mercator reprojection refresh. The
 chunk integration check measures cached inspection while a large overview render
 is pending, and rejects obsolete readouts after a view change. These checks use
 synthetic data rather than downloading seNorge archives.
+
+The chunk browser check also restores a responsive tab, simulates a silently
+terminated worker and verifies its replacement can read existing cached cells.
+It closes a real IndexedDB connection and checks that reading the same cached
+cell reopens it. Node recovery tests cover transient retries, bounded failures,
+stalled-window checkpoints, abortable retry delays and hidden-tab watchdogs.

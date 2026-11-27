@@ -9,9 +9,9 @@ const server=http.createServer((req,res)=>{const rel=new URL(req.url,'http://loc
  res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'application/json');res.end(body)}catch{res.statusCode=404;res.end('Not found')}
 });
 (async()=>{const {archiveQuery,archiveFixture}=await import('./helpers/snow-archive-fixture.mjs');await new Promise(r=>server.listen(8769,'127.0.0.1',r));const browser=await chromium.launch({...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),headless:true,args:['--no-sandbox']});try{
- const context=await browser.newContext({...devices['iPhone 14'],viewport:{width:390,height:844},deviceScaleFactor:1}),page=await context.newPage(),errors=[],calls=[];let active=0,maxActive=0,pointCalls=0;page.setDefaultTimeout(60000);page.on('pageerror',e=>errors.push(e.message));
+ const context=await browser.newContext({...devices['iPhone 14'],viewport:{width:390,height:844},deviceScaleFactor:1}),page=await context.newPage(),errors=[],calls=[];let active=0,maxActive=0,pointCalls=0,interruptedFetches=0;page.setDefaultTimeout(60000);page.on('pageerror',e=>errors.push(e.message));
  await context.route('https://services.xgeo.no/**',route=>{pointCalls++;return route.abort()});
- await context.route('https://thredds.met.no/**',async route=>{const url=route.request().url(),q=archiveQuery(url),bx=q.xFirst/37,by=(1549-q.yLast)/37;calls.push({...q,bx,by});active++;maxActive=Math.max(maxActive,active);await new Promise(r=>setTimeout(r,30));try{await route.fulfill({contentType:'application/octet-stream',headers:{'Access-Control-Allow-Origin':'*'},body:Buffer.from(archiveFixture(url))})}catch{}finally{active--}});
+ await context.route('https://thredds.met.no/**',async route=>{const url=route.request().url(),q=archiveQuery(url),bx=q.xFirst/37,by=(1549-q.yLast)/37;calls.push({...q,bx,by});active++;maxActive=Math.max(maxActive,active);if(!interruptedFetches){interruptedFetches++;try{await route.abort('failed')}finally{active--}return}await new Promise(r=>setTimeout(r,30));try{await route.fulfill({contentType:'application/octet-stream',headers:{'Access-Control-Allow-Origin':'*'},body:Buffer.from(archiveFixture(url))})}catch{}finally{active--}});
  await page.goto('http://127.0.0.1:8769/README.md');
  await page.evaluate(async()=>{
   // An old cache is deliberately ignored. No cache migration is performed.
@@ -80,6 +80,22 @@ const server=http.createServer((req,res)=>{const rel=new URL(req.url,'http://loc
   console.log('DISPLAY DEBUG',await page.evaluate(()=>({center:window.map.getView().getCenter(),size:window.map.getSize(),resolution:window.map.getView().getResolution(),pixel:window.snow.layer.getData([195,422]),sourceProjection:window.snow.source.getProjection().getCode(),tiles:[...window.snow.source.nativeTiles.values()].map(t=>({coord:t.tileCoord,state:t.getState(),pixel:t.getImage()?Array.from(t.getImage().getContext('2d').getImageData(95,95,1,1).data):null})),pending:window.snow.requests.size,status:window.snow.status.textContent})));
   throw error;
  });
+ // A closed connection is reopened instead of being mistaken for a cache miss.
+ const reopened=await page.evaluate(async()=>{
+  const {SnowSeasonStore}=await import('/src/map/snow-season/store.js'),{SnowSeasonEstimator}=await import('/src/map/snow-season/season-estimator.js'),cohort=new SnowSeasonEstimator().cohort;
+  const store=new SnowSeasonStore(`v3/annual-depths/${cohort.firstEndYear}/${cohort.lastEndYear}`);
+  const first=await store.get('575/7349'),db=store.connection;db.close();store.memory.clear();
+  const second=await store.get('575/7349'),changed=store.connection!==db;store.connection.close();return {first:first.days,second:second.days,changed};
+ });assert.deepEqual(reopened,{first:365.25,second:365.25,changed:true});
+ // Returning to a healthy tab keeps the worker. A silently terminated worker
+ // is detected by the same foreground probe and replaced without clearing data.
+ await page.evaluate(()=>{window.previousSnowWorker=window.snow.worker;window.dispatchEvent(new Event('pageshow'))});
+ await page.waitForFunction(()=>!window.snow.recovery.timer&&!window.snow.recovery.probe);assert.equal(await page.evaluate(()=>window.snow.worker===window.previousSnowWorker),true);
+ await page.evaluate(()=>{window.snow.recovery.timeoutMs=150;window.snow.worker.terminate();window.dispatchEvent(new Event('pageshow'))});
+ await page.waitForFunction(()=>window.snow.worker!==window.previousSnowWorker);
+ const afterRestore=await page.evaluate(()=>window.snow.request('inspect',{key:'575/7349'}));assert.equal(afterRestore.days,365.25);
+ await page.evaluate(()=>window.previousSnowWorker.onerror?.(new Event('error')));assert.equal(await page.evaluate(()=>Boolean(window.snow.worker)),true);
+ const resumed=await page.evaluate(()=>window.snow.request('resume',{force:true}));assert.ok(Number.isInteger(resumed.interrupted));
  if(ARTIFACTS){fs.mkdirSync(ARTIFACTS,{recursive:true});await page.screenshot({path:path.join(ARTIFACTS,'chunk-layer-iphone.png')})}
- assert.deepEqual(errors,[]);const result={hiddenBackgroundFetch:true,priorityAfterMove:firstNew,persisted,native,inspection:inspected,cacheReused:true,responsiveness,obsoleteReadIgnored,fourMonthAreaRequests:true,pointCalls,maxActive:testedConcurrency,errors};if(ARTIFACTS)fs.writeFileSync(path.join(ARTIFACTS,'chunk-browser-check.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
+ assert.deepEqual(errors,[]);const result={hiddenBackgroundFetch:true,priorityAfterMove:firstNew,persisted,native,inspection:inspected,cacheReused:true,responsiveness,obsoleteReadIgnored,reopened,workerRecovered:true,interruptedFetches,fourMonthAreaRequests:true,pointCalls,maxActive:testedConcurrency,errors};if(ARTIFACTS)fs.writeFileSync(path.join(ARTIFACTS,'chunk-browser-check.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
  }finally{await browser.close();await new Promise(r=>server.close(r))}})().catch(e=>{console.error(e);server.close();process.exitCode=1});
