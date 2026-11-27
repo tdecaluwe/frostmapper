@@ -22,7 +22,7 @@ const node=(tag,text,className)=>{const e=document.createElement(tag);if(text)e.
 // Map rendering and hit selection are separate from itinerary data and the pane.
 export class SkiTrekLayer {
  constructor(map){
-  this.map=map;this.source=new VectorSource({attributions:'Terrain routes: © Kartverket, NHM DTM 1 m'});this.layer=new VectorLayer({source:this.source,zIndex:30});map.addLayer(this.layer)
+  this.map=map;this.source=new VectorSource({attributions:'Terrain routes: © Kartverket, NHM DTM 1 m'});this.layer=new VectorLayer({properties:{storageLabel:'Ski routes'},source:this.source,zIndex:30});map.addLayer(this.layer)
   this.profileMarkerElement=node('div',null,'route-profile-marker');this.profileOverlay=new Overlay({element:this.profileMarkerElement,positioning:'center-center',stopEvent:false});map.addOverlay(this.profileOverlay)
   this.styles=new Map();this.visible=new Set();this.inputs=new Map();this.marker=null;this.routeURL=null;this.activeId=null
   this.panel=new RouteDetailsPanel({onChoose:id=>this.inspect(id,this.hitIds),onClose:()=>{if(this.routeURL)URL.revokeObjectURL(this.routeURL);this.routeURL=null;this.activeId=null;this.clearMarker();this.rebuild()},onFit:id=>this.fitRoute(id),onUse:id=>{this.catalog.select(id);this.visible.add(id);this.rebuild();this.inspect(id)},onDistance:d=>this.inspectDistance(d)})

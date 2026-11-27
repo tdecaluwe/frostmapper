@@ -48,7 +48,7 @@ export function addSteepnessLayer(map,contourReprojection){
   attributions:'Elevation: <a href="https://registry.opendata.aws/terrain-tiles/">Mapzen / AWS Terrain Tiles</a> · Norway: © Kartverket'
  })
  source.configureZoomBands(contourReprojection)
- const layer=new TileLayer({source,visible:false,opacity:.65,zIndex:10,preload:0,cacheSize:256})
+ const layer=new TileLayer({properties:{storageLabel:'Steepness'},source,visible:false,opacity:.65,zIndex:10,preload:0,cacheSize:256})
  map.addLayer(layer)
  toggle.addEventListener('change',()=>{layer.setVisible(toggle.checked);legend.hidden=!toggle.checked})
  return layer

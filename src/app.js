@@ -1,4 +1,4 @@
-import {attachNavigation} from './map/controls/navigation.js?v=edge-controls-v1'
+import {attachNavigation} from './map/controls/navigation.js?v=storage-usage-v1'
 import './map/projections/index.js?v=antarctica-v1'
 import Map from 'ol/Map.js'
 import {defaults as defaultInteractions} from 'ol/interaction/defaults.js'
@@ -11,7 +11,7 @@ import {ZoomBandSource} from './map/reprojection/zoom-band-source.js?v=source-lo
 import {ContourReprojection} from './map/reprojection/contour-reprojection.js?v=transparent-detail-v1'
 import {enableTileLoadingWhileInteracting} from './map/interactive-tile-loading.js'
 const baseSource=new (ZoomBandSource(XYZ))({url:'https://tile.opentopomap.org/{z}/{x}/{y}.png',crossOrigin:'anonymous',maxZoom:17,attributions:'Map data © OpenStreetMap contributors, SRTM | Map style © OpenTopoMap (CC-BY-SA)'})
-const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({preload:2,cacheSize:16384,source:baseSource})],view:createMapView('EPSG:3857',[10,50],4)})
+const map = new Map({target:'map',interactions:defaultInteractions({onFocusOnly:false}),layers:[new TileLayer({properties:{storageLabel:'OpenTopoMap'},preload:2,cacheSize:16384,source:baseSource})],view:createMapView('EPSG:3857',[10,50],4)})
 attachNavigation(map)
 enableTileLoadingWhileInteracting(map)
 const contourReprojection=new ContourReprojection(map,{steps:4})
@@ -23,11 +23,11 @@ const initial=readState(); if(initial) applyState(initial)
 syncUrl(map,applyState)
 import {attachScale} from './map/controls/scale.js'
 attachScale(map)
-import {nationalLayer,swiss} from './map/layers/national.js?v=source-loads'
+import {nationalLayer,swiss} from './map/layers/national.js?v=storage-usage-v1'
 nationalLayer(map,{name:'Switzerland',border:'ch',source:swiss,contourReprojection})
-import {france} from './map/layers/national.js?v=source-loads'
+import {france} from './map/layers/national.js?v=storage-usage-v1'
 nationalLayer(map,{name:'France',border:'fr',source:france,contourReprojection})
-import {norway} from './map/layers/national.js?v=source-loads'
+import {norway} from './map/layers/national.js?v=storage-usage-v1'
 nationalLayer(map,{name:'Norway',border:'no',source:norway,contourReprojection})
 
 document.querySelector('#projection').addEventListener('change',event=>{
@@ -42,14 +42,14 @@ document.querySelector('#projection').addEventListener('change',event=>{
  }
 })
 
-import {addSteepnessLayer} from './map/layers/steepness.js?v=palette-v2'
+import {addSteepnessLayer} from './map/layers/steepness.js?v=storage-usage-v1'
 addSteepnessLayer(map,contourReprojection)
 
-import {addSkiTrek} from './map/layers/ski-trek.js?v=route-minima-v1'
+import {addSkiTrek} from './map/layers/ski-trek.js?v=storage-usage-v1'
 addSkiTrek(map)
 
-import {addAntarcticaLayer} from './map/layers/antarctica.js?v=wrap-v1'
+import {addAntarcticaLayer} from './map/layers/antarctica.js?v=storage-usage-v1'
 addAntarcticaLayer(map)
 
-import {addSnowSeasonLayer} from './map/layers/snow-season.js?v=snow-queue-v4'
+import {addSnowSeasonLayer} from './map/layers/snow-season.js?v=storage-usage-v1'
 addSnowSeasonLayer(map)

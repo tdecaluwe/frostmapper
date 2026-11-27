@@ -118,3 +118,24 @@ body.route-details-open .snow-season-map-readout{bottom:calc(var(--route-panel-h
 .snow-season-status[data-state="error"]{color:#a33625;}
 .snow-season-retry{font:inherit;padding:2px 6px;}
 .snow-season-retry[hidden]{display:none;}
+
+.storage-usage-control{border-top:1px solid #dce3e6;}
+#navigation #storage-usage-toggle{display:flex;align-items:center;justify-content:center;border:0;}
+.storage-usage-panel[hidden]{display:none;}
+.storage-usage-panel{position:absolute;top:0;right:100%;box-sizing:border-box;width:330px;max-width:calc(100vw - 4rem);max-height:calc(100dvh - 1.2rem);margin-right:.4rem;overflow:auto;padding:.6rem;background:#fffffff5;border-radius:.3rem;box-shadow:0 1px 8px #0003;font:12px/1.4 system-ui;color:#263d48;}
+.storage-usage-header{display:flex;align-items:center;justify-content:space-between;gap:.5rem;}
+.storage-usage-panel h2{margin:0;font-size:14px;font-weight:600;}
+#navigation .storage-usage-panel button{width:auto;height:auto;min-height:32px;margin:0;padding:3px 8px;border:1px solid #cad7dc;border-radius:3px;font:12px system-ui;}
+#navigation .storage-usage-panel .storage-usage-close{min-width:36px;min-height:36px;padding:0;border:0;font-size:24px;}
+.storage-usage-panel table{width:100%;border-collapse:collapse;font-size:11px;}
+.storage-usage-panel th,.storage-usage-panel td{padding:.35rem .2rem;border-bottom:1px solid #dce3e6;text-align:right;font-variant-numeric:tabular-nums;}
+.storage-usage-panel th:first-child{text-align:left;}
+.storage-usage-panel tbody th{font-weight:400;}
+.storage-usage-panel td{white-space:nowrap;}
+.storage-usage-status{margin:.25rem 0;color:#56646b;}
+.storage-usage-status:empty{display:none;}
+.storage-usage-total{margin:.5rem 0;font-weight:600;}
+.storage-usage-note,.storage-usage-origin{margin:.4rem 0;color:#56646b;font-size:10px;}
+.storage-usage-footer{display:flex;justify-content:flex-end;}
+body.route-details-open .storage-usage-panel{max-height:calc(100dvh - var(--route-panel-height,310px) - 1rem);}
+@media(pointer:coarse){#navigation .storage-usage-panel button{min-height:40px;}#navigation .storage-usage-panel .storage-usage-close{min-width:44px;min-height:44px;}}

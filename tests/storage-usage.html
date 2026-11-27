@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Storage usage integration check</title>
+<link rel="stylesheet" href="../src/styles/main.css">
+<script type="importmap">{"imports":{"ol/":"https://esm.sh/ol@10.6.1/"}}</script>
+<div id="map" tabindex="0"></div><div id="navigation"></div><aside><details id="map-options"><summary aria-label="Map options">☰</summary><div class="options-content">Layer settings</div></details></aside>
+<script type="module">
+import Map from 'ol/Map.js';import View from 'ol/View.js';import TileLayer from 'ol/layer/Tile.js';import {attachNavigation} from '../src/map/controls/navigation.js';
+window.map=new Map({target:'map',view:new View({center:[0,0],zoom:1}),layers:[
+ new TileLayer({properties:{storageLabel:'OpenTopoMap'}}),
+ new TileLayer({properties:{storageId:'snow-season',storageLabel:'Snow season · 95%',storageStores:[{database:'frostmapper-snow-seasons',store:'chunks'},{database:'frostmapper-snow-seasons',store:'summaries'}]}}),
+ new TileLayer({properties:{storageLabel:'Unused test layer',storageStores:[{database:'frostmapper-unused-test',store:'missing'}]}})
+]});attachNavigation(window.map);
+</script>

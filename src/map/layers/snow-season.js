@@ -11,7 +11,7 @@ export class SnowSeasonLayer{
  constructor(map){
   this.map=map;this.generation=0;this.metric='length';this.grid=null;this.worker=null;this.requests=new Map();this.requestId=0;this.inspectionId=0
   proj4.defs('EPSG:32633','+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs');register(proj4);getProjection('EPSG:32633').setExtent(SNOW_EXTENT)
-  this.source=new SnowSeasonRasterSource(tile=>this.request('render',tile));this.layer=new TileLayer({source:this.source,visible:false,opacity:.6,zIndex:9,preload:1});this.layer.set('name','snow-season');map.addLayer(this.layer)
+  this.source=new SnowSeasonRasterSource(tile=>this.request('render',tile));this.layer=new TileLayer({properties:{storageLabel:'Snow season · 95%',storageId:'snow-season',storageStores:[{database:'frostmapper-snow-seasons',store:'chunks'},{database:'frostmapper-snow-seasons',store:'summaries'}]},source:this.source,visible:false,opacity:.6,zIndex:9,preload:1});this.layer.set('name','snow-season');map.addLayer(this.layer)
   this.createControls();map.on('moveend',()=>this.updateView());map.on('change:view',()=>this.updateView());map.on('singleclick',event=>this.inspect(event.coordinate))
   const selected=new URL(location.href).searchParams.get('snow')
   if(['1','length','start','end'].includes(selected)){this.toggle.checked=true;if(selected!=='1'){this.metric=selected;this.selector.value=selected}this.enable()}

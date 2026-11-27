@@ -18,7 +18,7 @@ export function createAntarcticSource(){
  guardReprojection(source);return source
 }
 export function addAntarcticaLayer(map){
- const layer=new TileLayer({source:createAntarcticSource(),visible:true,zIndex:1,preload:2,cacheSize:512});map.addLayer(layer)
+ const layer=new TileLayer({properties:{storageLabel:'Antarctica · BAS'},source:createAntarcticSource(),visible:true,zIndex:1,preload:2,cacheSize:512});map.addLayer(layer)
  const row=document.createElement('div');row.className='trek-row'
  const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=true;label.append(input,' Antarctica · BAS');row.append(label)
  const show=document.createElement('button');show.type='button';show.textContent='↗';show.title='Show Antarctica';show.setAttribute('aria-label',show.title);row.append(show);document.querySelector('#layers').append(row)
